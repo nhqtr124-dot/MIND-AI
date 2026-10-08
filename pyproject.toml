@@ -3,6 +3,9 @@ name = "mind-ai-workspace"
 version = "0.1.0"
 requires-python = ">=3.12"
 
+[dependency-groups]
+dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.7", "mypy>=1.13"]
+
 [tool.uv.workspace]
 members = ["services/api", "modules/*"]
 
