@@ -1,0 +1,67 @@
+# Local/self-hosted stack. Usage (from the repo root):
+#   docker compose -f infrastructure/docker/docker-compose.yml up --build
+# SECURITY: api and worker mount the Docker socket to launch sandbox containers.
+# Access to that socket is root-equivalent on the host; for production run the
+# sandbox on a dedicated, isolated host (see docs/SECURITY.md and docs/DEPLOYMENT.md).
+name: mind-ai
+
+x-api-env: &api-env
+  MIND_ENV: ${MIND_ENV:-dev}
+  MIND_DATABASE_URL: postgresql+psycopg://mind:${POSTGRES_PASSWORD:-mind}@postgres:5432/mind
+  MIND_REDIS_URL: redis://redis:6379/0
+  MIND_SECRET_KEY: ${MIND_SECRET_KEY:?set MIND_SECRET_KEY in .env}
+  MIND_ENCRYPTION_KEY: ${MIND_ENCRYPTION_KEY:-}
+  MIND_CORS_ORIGINS: '["http://localhost:3000"]'
+  MIND_PUBLIC_API_URL: http://localhost:8000
+  MIND_PREVIEW_PUBLIC_URL: http://localhost:8100
+  MIND_STORAGE_DIR: /data/storage
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.1-pg16
+    environment: { POSTGRES_USER: mind, POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-mind}", POSTGRES_DB: mind }
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U mind"], interval: 5s, retries: 20 }
+  redis:
+    image: redis:7-alpine
+  migrate:
+    build: { context: ../.., dockerfile: infrastructure/docker/api/Dockerfile }
+    environment: *api-env
+    command: ["python", "-m", "mind_api.cli", "migrate"]
+    depends_on: { postgres: { condition: service_healthy } }
+  api:
+    build: { context: ../.., dockerfile: infrastructure/docker/api/Dockerfile }
+    environment: *api-env
+    ports: ["8000:8000"]
+    networks: [default, sandbox]
+    volumes: [storage:/data/storage, /var/run/docker.sock:/var/run/docker.sock, /tmp:/tmp]
+    depends_on: { migrate: { condition: service_completed_successfully }, redis: { condition: service_started } }
+  preview:
+    build: { context: ../.., dockerfile: infrastructure/docker/api/Dockerfile }
+    environment: *api-env
+    command: ["uvicorn", "mind_api.preview_app:app", "--host", "0.0.0.0", "--port", "8100"]
+    ports: ["8100:8100"]
+    networks: [default, sandbox]
+    depends_on: { migrate: { condition: service_completed_successfully } }
+  worker:
+    build: { context: ../.., dockerfile: infrastructure/docker/api/Dockerfile }
+    environment: *api-env
+    command: ["python", "-m", "mind_api.worker"]
+    networks: [default, sandbox]
+    volumes: [storage:/data/storage, /var/run/docker.sock:/var/run/docker.sock, /tmp:/tmp]
+    depends_on: { migrate: { condition: service_completed_successfully } }
+  web:
+    build: { context: ../.., dockerfile: infrastructure/docker/web/Dockerfile, args: { MIND_API_URL: "http://api:8000" } }
+    ports: ["3000:3000"]
+    depends_on: [api]
+
+networks:
+  # Sandbox previews join this internal (no-internet) network; the proxy and API reach them here.
+  # Created (as --internal) by scripts/setup-sandbox.sh; run it before `compose up`.
+  sandbox:
+    name: mind-sandbox-net
+    external: true
+
+volumes:
+  pgdata:
+  storage:
