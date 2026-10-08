@@ -1,0 +1,19 @@
+[project]
+name = "mind-ai-workspace"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.uv.workspace]
+members = ["services/api", "modules/*"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = ["S101", "E501", "B008", "S603", "S607"]
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true

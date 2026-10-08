@@ -1,0 +1,12 @@
+{
+  "name": "mind-ai",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev:web": "pnpm --filter @mind/web dev",
+    "build:web": "pnpm --filter @mind/web build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "gen:api": "bash scripts/gen-api-types.sh"
+  }
+}
