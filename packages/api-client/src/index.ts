@@ -42,6 +42,8 @@ function readCookie(name: string): string | null {
 }
 
 const UNSAFE = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+/** Endpoints where a 401 means "bad credentials", not "access token expired". */
+const NO_REFRESH = /\/auth\/(login|register|refresh|logout)$/;
 
 export class MindClient {
   readonly api: Client<paths>;
@@ -76,7 +78,7 @@ export class MindClient {
   async send(req: Request, retry = true): Promise<Response> {
     const prepared = await this.authorize(req.clone());
     const res = await this.fetchImpl(prepared);
-    if (res.status === 401 && retry && !req.url.includes("/auth/")) {
+    if (res.status === 401 && retry && !NO_REFRESH.test(new URL(req.url, "http://x").pathname)) {
       if (await this.refresh()) return this.send(req, false);
       this.opts.onUnauthorized?.();
     }

@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "MIND AI",
+    "slug": "mind-ai",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "mindai",
+    "ios": { "bundleIdentifier": "ai.mind.app", "supportsTablet": true },
+    "android": { "package": "ai.mind.app" },
+    "extra": { "apiUrl": "http://10.0.2.2:8000" }
+  }
+}
