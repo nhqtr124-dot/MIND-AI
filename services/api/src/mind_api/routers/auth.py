@@ -12,8 +12,24 @@ from ..config import get_settings
 from ..db import utcnow
 from ..deps import ACCESS_COOKIE, CSRF_COOKIE, DB, REFRESH_COOKIE, CurrentUser, client_ip, rate_limit
 from ..models import Invitation, Membership, Organization, RefreshToken, User
-from ..schemas import AcceptInviteIn, LoginIn, PasswordChange, RefreshIn, RegisterIn, TokenOut, UserOut, UserUpdate
-from ..security import create_access_token, dummy_verify, hash_password, new_opaque_token, sha256, verify_password
+from ..schemas import (
+    AcceptInviteIn,
+    LoginIn,
+    PasswordChange,
+    RefreshIn,
+    RegisterIn,
+    TokenOut,
+    UserOut,
+    UserUpdate,
+)
+from ..security import (
+    create_access_token,
+    dummy_verify,
+    hash_password,
+    new_opaque_token,
+    sha256,
+    verify_password,
+)
 from ..services.audit import audit
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -32,13 +48,37 @@ def _issue(db: Session, user: User, response: Response, request: Request) -> Tok
     s = get_settings()
     access = create_access_token(user.id)
     refresh, refresh_hash = new_opaque_token()
-    db.add(RefreshToken(user_id=user.id, token_hash=refresh_hash, expires_at=utcnow() + timedelta(days=s.refresh_token_days), user_agent=(request.headers.get("user-agent") or "")[:300]))
+    db.add(
+        RefreshToken(
+            user_id=user.id,
+            token_hash=refresh_hash,
+            expires_at=utcnow() + timedelta(days=s.refresh_token_days),
+            user_agent=(request.headers.get("user-agent") or "")[:300],
+        )
+    )
     csrf = secrets.token_urlsafe(24)
     kw = {"secure": s.cookie_secure, "samesite": "lax"}
-    response.set_cookie(ACCESS_COOKIE, access, httponly=True, max_age=s.access_token_minutes * 60, path="/", **kw)  # type: ignore[arg-type]
-    response.set_cookie(REFRESH_COOKIE, refresh, httponly=True, max_age=s.refresh_token_days * 86400, path="/api/v1/auth", **kw)  # type: ignore[arg-type]
-    response.set_cookie(CSRF_COOKIE, csrf, httponly=False, max_age=s.refresh_token_days * 86400, path="/", **kw)  # type: ignore[arg-type]
-    return TokenOut(access_token=access, refresh_token=refresh, expires_in=s.access_token_minutes * 60, csrf_token=csrf, user=UserOut.model_validate(user))
+    response.set_cookie(
+        ACCESS_COOKIE, access, httponly=True, max_age=s.access_token_minutes * 60, path="/", **kw
+    )  # type: ignore[arg-type]
+    response.set_cookie(
+        REFRESH_COOKIE,
+        refresh,
+        httponly=True,
+        max_age=s.refresh_token_days * 86400,
+        path="/api/v1/auth",
+        **kw,
+    )  # type: ignore[arg-type]
+    response.set_cookie(
+        CSRF_COOKIE, csrf, httponly=False, max_age=s.refresh_token_days * 86400, path="/", **kw
+    )  # type: ignore[arg-type]
+    return TokenOut(
+        access_token=access,
+        refresh_token=refresh,
+        expires_in=s.access_token_minutes * 60,
+        csrf_token=csrf,
+        user=UserOut.model_validate(user),
+    )
 
 
 def _accept_invitation(db: Session, user: User, token: str) -> Invitation:
@@ -46,8 +86,12 @@ def _accept_invitation(db: Session, user: User, token: str) -> Invitation:
     if inv is None or inv.accepted_at or inv.revoked_at or inv.expires_at < utcnow():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invitation is invalid, expired or already used")
     if inv.email.lower() != user.email.lower():
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "This invitation was sent to a different email address")
-    existing = db.scalar(select(Membership).where(Membership.org_id == inv.org_id, Membership.user_id == user.id))
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "This invitation was sent to a different email address"
+        )
+    existing = db.scalar(
+        select(Membership).where(Membership.org_id == inv.org_id, Membership.user_id == user.id)
+    )
     if existing is None:
         db.add(Membership(org_id=inv.org_id, user_id=user.id, role=inv.role))
     inv.accepted_at = utcnow()
@@ -61,10 +105,17 @@ def register(body: RegisterIn, request: Request, response: Response, db: DB) -> 
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Registration is invite-only on this server")
     if db.scalar(select(User.id).where(func.lower(User.email) == body.email.lower())):
         raise HTTPException(status.HTTP_409_CONFLICT, "An account with this email already exists")
-    user = User(email=body.email.lower(), password_hash=hash_password(body.password), display_name=body.display_name.strip(), locale=body.locale)
+    user = User(
+        email=body.email.lower(),
+        password_hash=hash_password(body.password),
+        display_name=body.display_name.strip(),
+        locale=body.locale,
+    )
     db.add(user)
     db.flush()
-    org = Organization(name=f"{user.display_name}'s workspace", slug=unique_slug(db, user.display_name), is_personal=True)
+    org = Organization(
+        name=f"{user.display_name}'s workspace", slug=unique_slug(db, user.display_name), is_personal=True
+    )
     db.add(org)
     db.flush()
     db.add(Membership(org_id=org.id, user_id=user.id, role="owner"))
@@ -99,10 +150,16 @@ def refresh(request: Request, response: Response, db: DB, body: RefreshIn | None
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Refresh token invalid or expired")
     if rt.revoked_at is not None:
         # Reuse of a rotated token suggests theft: revoke every session of this user.
-        db.execute(update(RefreshToken).where(RefreshToken.user_id == rt.user_id, RefreshToken.revoked_at.is_(None)).values(revoked_at=utcnow()))
+        db.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == rt.user_id, RefreshToken.revoked_at.is_(None))
+            .values(revoked_at=utcnow())
+        )
         audit(db, "auth.refresh_reuse_detected", user_id=rt.user_id, ip=client_ip(request))
         db.commit()
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Refresh token reuse detected; all sessions were signed out")
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Refresh token reuse detected; all sessions were signed out"
+        )
     user = db.get(User, rt.user_id)
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User inactive")
@@ -140,13 +197,23 @@ def change_password(body: PasswordChange, request: Request, user: CurrentUser, d
     if not verify_password(body.current_password, user.password_hash):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Current password is incorrect")
     user.password_hash = hash_password(body.new_password)
-    db.execute(update(RefreshToken).where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None)).values(revoked_at=utcnow()))
+    db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=utcnow())
+    )
     audit(db, "user.password_changed", user_id=user.id, ip=client_ip(request))
 
 
 @router.post("/invitations/accept", status_code=200)
 def accept_invitation(body: AcceptInviteIn, user: CurrentUser, db: DB) -> dict[str, str]:
     inv = _accept_invitation(db, user, body.token)
-    audit(db, "org.invitation_accepted", user_id=user.id, org_id=inv.org_id, target_type="invitation", target_id=inv.id)
+    audit(
+        db,
+        "org.invitation_accepted",
+        user_id=user.id,
+        org_id=inv.org_id,
+        target_type="invitation",
+        target_id=inv.id,
+    )
     return {"org_id": str(inv.org_id), "role": inv.role}
-

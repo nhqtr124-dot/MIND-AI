@@ -27,7 +27,28 @@ MAX_FILE_BYTES = 1_000_000
 MAX_FILES = 500
 MAX_TOTAL_BYTES = 20_000_000
 _SAFE_PATH = re.compile(r"^[A-Za-z0-9_\-./ ]{1,300}$")
-TEXT_EXT = {".html", ".htm", ".css", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".json", ".py", ".md", ".txt", ".toml", ".yaml", ".yml", ".svg", ".sql", ".csv", ".env.example"}
+TEXT_EXT = {
+    ".html",
+    ".htm",
+    ".css",
+    ".js",
+    ".mjs",
+    ".cjs",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".json",
+    ".py",
+    ".md",
+    ".txt",
+    ".toml",
+    ".yaml",
+    ".yml",
+    ".svg",
+    ".sql",
+    ".csv",
+    ".env.example",
+}
 
 
 class WorkspaceError(ValueError):
@@ -44,10 +65,18 @@ def normalize_path(path: str) -> str:
 
 
 def workspace_rows(db: Session, project_id: uuid.UUID) -> list[ProjectFile]:
-    return list(db.scalars(select(ProjectFile).where(ProjectFile.project_id == project_id, ProjectFile.kind == "workspace").order_by(ProjectFile.path)))
+    return list(
+        db.scalars(
+            select(ProjectFile)
+            .where(ProjectFile.project_id == project_id, ProjectFile.kind == "workspace")
+            .order_by(ProjectFile.path)
+        )
+    )
 
 
-def write_file(db: Session, project: Project, path: str, content: bytes, user_id: uuid.UUID | None) -> ProjectFile:
+def write_file(
+    db: Session, project: Project, path: str, content: bytes, user_id: uuid.UUID | None
+) -> ProjectFile:
     path = normalize_path(path)
     if len(content) > MAX_FILE_BYTES:
         raise WorkspaceError(f"{path} exceeds {MAX_FILE_BYTES} bytes")
@@ -62,7 +91,12 @@ def write_file(db: Session, project: Project, path: str, content: bytes, user_id
     key = f"orgs/{project.org_id}/projects/{project.id}/workspace/{sha}"
     get_storage().put_bytes(key, content, guess_mime(path))
     if existing:
-        existing.storage_key, existing.size_bytes, existing.sha256, existing.mime_type = key, len(content), sha, guess_mime(path)
+        existing.storage_key, existing.size_bytes, existing.sha256, existing.mime_type = (
+            key,
+            len(content),
+            sha,
+            guess_mime(path),
+        )
         return existing
     f = ProjectFile(
         org_id=project.org_id, project_id=project.id, kind="workspace", path=path, storage_key=key, size_bytes=len(content),
@@ -75,7 +109,11 @@ def write_file(db: Session, project: Project, path: str, content: bytes, user_id
 
 def delete_file(db: Session, project: Project, path: str) -> bool:
     path = normalize_path(path)
-    row = db.scalar(select(ProjectFile).where(ProjectFile.project_id == project.id, ProjectFile.kind == "workspace", ProjectFile.path == path))
+    row = db.scalar(
+        select(ProjectFile).where(
+            ProjectFile.project_id == project.id, ProjectFile.kind == "workspace", ProjectFile.path == path
+        )
+    )
     if row is None:
         return False
     db.delete(row)  # content-addressed blobs may be shared by snapshots; they are not deleted here
@@ -121,8 +159,23 @@ def snapshot(db: Session, project: Project, user_id: uuid.UUID | None, label: st
     with tempfile.TemporaryDirectory(prefix="mind-snap-") as tmp:
         p = Path(tmp) / f"{re.sub(r'[^A-Za-z0-9]+', '-', project.name).strip('-') or 'project'}.zip"
         p.write_bytes(export_zip(files))
-        art = create_artifact(db, org_id=project.org_id, project_id=project.id, user_id=user_id, kind="code", title=f"{project.name}: {label}", source={"type": "workspace_snapshot", "label": label})
-        store_version(db, art, [(p, {"format": "zip", "files": len(files)})], validation={"files": len(files)}, params=None, user_id=user_id)
+        art = create_artifact(
+            db,
+            org_id=project.org_id,
+            project_id=project.id,
+            user_id=user_id,
+            kind="code",
+            title=f"{project.name}: {label}",
+            source={"type": "workspace_snapshot", "label": label},
+        )
+        store_version(
+            db,
+            art,
+            [(p, {"format": "zip", "files": len(files)})],
+            validation={"files": len(files)},
+            params=None,
+            user_id=user_id,
+        )
         art.status = "completed"
         return art.id
 
@@ -158,7 +211,16 @@ def run_tests(files: dict[str, bytes], template_key: str | None) -> dict[str, An
         r = run(wd, list(t.test_command), runtime=t.runtime, limits=Limits(timeout_s=90))
     except SandboxError as exc:
         return {"ran": False, "reason": str(exc)}
-    return {"ran": True, "passed": r.ok, "exit_code": r.exit_code, "timed_out": r.timed_out, "stdout": r.stdout[-6000:], "stderr": r.stderr[-6000:], "command": list(t.test_command), "duration_s": r.duration_s}
+    return {
+        "ran": True,
+        "passed": r.ok,
+        "exit_code": r.exit_code,
+        "timed_out": r.timed_out,
+        "stdout": r.stdout[-6000:],
+        "stderr": r.stderr[-6000:],
+        "command": list(t.test_command),
+        "duration_s": r.duration_s,
+    }
 
 
 @handler("builder.test")
@@ -187,7 +249,10 @@ Rules:
 - Keep the existing tests passing and add or update tests for new behaviour. Test command: {test_cmd}
 - Never include secrets. Keep files under 200 KB."""
 
-PREINSTALLED = {"python": " and the preinstalled packages fastapi, uvicorn, jinja2, sqlalchemy, pydantic, pytest, httpx, numpy", "node": ""}
+PREINSTALLED = {
+    "python": " and the preinstalled packages fastapi, uvicorn, jinja2, sqlalchemy, pydantic, pytest, httpx, numpy",
+    "node": "",
+}
 
 
 def _context_files(files: dict[str, bytes], budget: int = 60_000) -> str:
@@ -206,12 +271,18 @@ def _context_files(files: dict[str, bytes], budget: int = 60_000) -> str:
     return "\n".join(parts)
 
 
-def _apply_changes(db: Session, project: Project, change: dict[str, Any], user_id: uuid.UUID | None) -> list[str]:
+def _apply_changes(
+    db: Session, project: Project, change: dict[str, Any], user_id: uuid.UUID | None
+) -> list[str]:
     if not isinstance(change, dict) or not isinstance(change.get("files", []), list):
         raise WorkspaceError("model output is not a valid change set")
     touched = []
     for f in change.get("files", []):
-        if not isinstance(f, dict) or not isinstance(f.get("path"), str) or not isinstance(f.get("content"), str):
+        if (
+            not isinstance(f, dict)
+            or not isinstance(f.get("path"), str)
+            or not isinstance(f.get("content"), str)
+        ):
             raise WorkspaceError("each file needs a string path and content")
         write_file(db, project, f["path"], f["content"].encode(), user_id)
         touched.append(normalize_path(f["path"]))
@@ -234,7 +305,9 @@ def builder_ai_edit(ctx: JobContext) -> dict[str, Any]:
         snap_id = snapshot(db, project, ctx.user_id, "before AI edit")
         files = read_files(db, project.id)
     system = (
-        BUILDER_SYSTEM.replace("{runtime}", t.runtime).replace("{deps}", PREINSTALLED.get(t.runtime, "")).replace("{test_cmd}", " ".join(t.test_command))
+        BUILDER_SYSTEM.replace("{runtime}", t.runtime)
+        .replace("{deps}", PREINSTALLED.get(t.runtime, ""))
+        .replace("{test_cmd}", " ".join(t.test_command))
     )
     ctx.progress(10, "Coding Agent is writing changes")
     history: list[dict[str, Any]] = []
@@ -243,7 +316,9 @@ def builder_ai_edit(ctx: JobContext) -> dict[str, Any]:
     summary = ""
     for attempt in range(2):
         try:
-            r = llm.complete_sync(ctx.org_id, ctx.user_id, system, request, max_output_tokens=12000, purpose="builder")
+            r = llm.complete_sync(
+                ctx.org_id, ctx.user_id, system, request, max_output_tokens=12000, purpose="builder"
+            )
         except llm.LLMUnavailable as exc:
             raise JobFailed(str(exc), {"snapshot_artifact_id": str(snap_id)}) from exc
         try:
@@ -254,13 +329,24 @@ def builder_ai_edit(ctx: JobContext) -> dict[str, Any]:
                 touched = _apply_changes(db, project, change, ctx.user_id)
                 files = read_files(db, project.id)
         except (ValueError, WorkspaceError) as exc:
-            history.append({"attempt": attempt + 1, "model": r.model, "error": f"unusable model output: {exc}"})
+            history.append(
+                {"attempt": attempt + 1, "model": r.model, "error": f"unusable model output: {exc}"}
+            )
             request += f"\n\nYour previous reply could not be applied ({exc}). Reply with valid JSON only."
             continue
         summary = str(change.get("summary", ""))[:2000]
         ctx.progress(50 + attempt * 20, "Testing Agent is running the test suite")
         tests = run_tests(files, project.builder_template)
-        history.append({"attempt": attempt + 1, "model": r.model, "summary": summary, "files": touched, "tests_passed": tests.get("passed"), "tests_ran": tests.get("ran")})
+        history.append(
+            {
+                "attempt": attempt + 1,
+                "model": r.model,
+                "summary": summary,
+                "files": touched,
+                "tests_passed": tests.get("passed"),
+                "tests_ran": tests.get("ran"),
+            }
+        )
         if not tests.get("ran") or tests.get("passed"):
             break
         request = (
@@ -269,7 +355,10 @@ def builder_ai_edit(ctx: JobContext) -> dict[str, Any]:
         )
         ctx.progress(60, "Coding Agent is repairing a failing test")
     if not history or "files" not in history[-1]:
-        raise JobFailed("the model did not return an applicable change", {"attempts": history, "snapshot_artifact_id": str(snap_id)})
+        raise JobFailed(
+            "the model did not return an applicable change",
+            {"attempts": history, "snapshot_artifact_id": str(snap_id)},
+        )
     ok = bool(tests.get("passed"))
     return {
         "summary": summary,
@@ -282,7 +371,14 @@ def builder_ai_edit(ctx: JobContext) -> dict[str, Any]:
 
 def template_catalog() -> list[dict[str, Any]]:
     return [
-        {"key": t.key, "title": t.title, "description": t.description, "runtime": t.runtime, "files": sorted(t.files), "test_command": list(t.test_command)}
+        {
+            "key": t.key,
+            "title": t.title,
+            "description": t.description,
+            "runtime": t.runtime,
+            "files": sorted(t.files),
+            "test_command": list(t.test_command),
+        }
         for t in PROJECT_TEMPLATES.values()
     ]
 

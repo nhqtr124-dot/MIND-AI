@@ -52,19 +52,37 @@ def create_run(body: RunCreate, request: Request, user: CurrentUser, db: DB) -> 
         except PlanError as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     job_id = start_run(db, run)
-    audit(db, "agent.run_created", user_id=user.id, org_id=scope.org_id, target_type="agent_run", target_id=run.id, ip=client_ip(request), plan_source=run.plan_source)
+    audit(
+        db,
+        "agent.run_created",
+        user_id=user.id,
+        org_id=scope.org_id,
+        target_type="agent_run",
+        target_id=run.id,
+        ip=client_ip(request),
+        plan_source=run.plan_source,
+    )
     return RunCreated(job_id=job_id, run_id=run.id)
 
 
 @router.get("/agents/runs")
-def list_runs(user: CurrentUser, db: DB, org_id: uuid.UUID | None = None, project_id: uuid.UUID | None = None, limit: int = 50) -> list[dict[str, Any]]:
+def list_runs(
+    user: CurrentUser,
+    db: DB,
+    org_id: uuid.UUID | None = None,
+    project_id: uuid.UUID | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
     scope = resolve_scope(db, user, org_id, project_id)
     q = select(AgentRun).where(AgentRun.org_id == scope.org_id)
     if scope.role not in ("owner", "admin"):
         q = q.where(AgentRun.user_id == user.id)
     if scope.project_id:
         q = q.where(AgentRun.project_id == scope.project_id)
-    return [run_dict(r, with_tasks=False) for r in db.scalars(q.order_by(AgentRun.created_at.desc()).limit(min(limit, 200)))]
+    return [
+        run_dict(r, with_tasks=False)
+        for r in db.scalars(q.order_by(AgentRun.created_at.desc()).limit(min(limit, 200)))
+    ]
 
 
 @router.get("/agents/runs/{run_id}")
@@ -75,9 +93,20 @@ def read_run(run_id: uuid.UUID, user: CurrentUser, db: DB) -> dict[str, Any]:
 @router.get("/agents/runs/{run_id}/executions")
 def run_executions(run_id: uuid.UUID, user: CurrentUser, db: DB) -> list[dict[str, Any]]:
     run = get_run(db, user, run_id)
-    rows = db.scalars(select(ToolExecution).where(ToolExecution.run_id == run.id).order_by(ToolExecution.created_at))
+    rows = db.scalars(
+        select(ToolExecution).where(ToolExecution.run_id == run.id).order_by(ToolExecution.created_at)
+    )
     return [
-        {"id": str(e.id), "task_id": str(e.task_id) if e.task_id else None, "tool": e.tool, "args": e.args, "status": e.status, "error": e.error, "duration_ms": e.duration_ms, "created_at": e.created_at.isoformat()}
+        {
+            "id": str(e.id),
+            "task_id": str(e.task_id) if e.task_id else None,
+            "tool": e.tool,
+            "args": e.args,
+            "status": e.status,
+            "error": e.error,
+            "duration_ms": e.duration_ms,
+            "created_at": e.created_at.isoformat(),
+        }
         for e in rows
     ]
 
@@ -96,7 +125,14 @@ def cancel_run(run_id: uuid.UUID, user: CurrentUser, db: DB) -> dict[str, Any]:
         for a in db.scalars(select(Approval).where(Approval.run_id == run.id, Approval.status == "pending")):
             a.status, a.decided_at, a.decision_note = "expired", utcnow(), "run cancelled"
         run.status, run.finished_at = "cancelled", utcnow()
-    audit(db, "agent.run_cancelled", user_id=user.id, org_id=run.org_id, target_type="agent_run", target_id=run.id)
+    audit(
+        db,
+        "agent.run_cancelled",
+        user_id=user.id,
+        org_id=run.org_id,
+        target_type="agent_run",
+        target_id=run.id,
+    )
     return run_dict(run)
 
 
@@ -104,7 +140,9 @@ def cancel_run(run_id: uuid.UUID, user: CurrentUser, db: DB) -> dict[str, Any]:
 
 
 @router.get("/approvals", response_model=list[ApprovalOut])
-def list_approvals(org_id: uuid.UUID, user: CurrentUser, db: DB, status_filter: str = "pending") -> list[Approval]:
+def list_approvals(
+    org_id: uuid.UUID, user: CurrentUser, db: DB, status_filter: str = "pending"
+) -> list[Approval]:
     _, role = require_org(db, user, org_id)
     q = select(Approval).where(Approval.org_id == org_id)
     if status_filter != "all":
@@ -115,21 +153,36 @@ def list_approvals(org_id: uuid.UUID, user: CurrentUser, db: DB, status_filter: 
 
 
 @router.post("/approvals/{approval_id}", response_model=ApprovalOut)
-def decide(approval_id: uuid.UUID, body: ApprovalDecision, request: Request, user: CurrentUser, db: DB) -> Approval:
+def decide(
+    approval_id: uuid.UUID, body: ApprovalDecision, request: Request, user: CurrentUser, db: DB
+) -> Approval:
     a = db.get(Approval, approval_id)
     if a is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Approval not found")
     _, role = require_org(db, user, a.org_id)
     is_admin = role in ("owner", "admin")
     if a.risk in ("high", "critical") and not is_admin:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, f"{a.risk}-risk actions must be approved by an organization admin or owner")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            f"{a.risk}-risk actions must be approved by an organization admin or owner",
+        )
     if not is_admin and a.requested_by != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Approval not found")
     if a.status != "pending":
         raise HTTPException(status.HTTP_409_CONFLICT, f"Approval already {a.status}")
     a.status = "approved" if body.decision == "approve" else "rejected"
     a.decided_by, a.decided_at, a.decision_note = user.id, utcnow(), body.note
-    audit(db, f"approval.{a.status}", user_id=user.id, org_id=a.org_id, target_type="approval", target_id=a.id, ip=client_ip(request), action=a.action, risk=a.risk)
+    audit(
+        db,
+        f"approval.{a.status}",
+        user_id=user.id,
+        org_id=a.org_id,
+        target_type="approval",
+        target_id=a.id,
+        ip=client_ip(request),
+        tool=a.action,
+        risk=a.risk,
+    )
     if a.run_id:
         run = db.get(AgentRun, a.run_id)
         if run and run.status == "awaiting_approval":
@@ -138,7 +191,15 @@ def decide(approval_id: uuid.UUID, body: ApprovalDecision, request: Request, use
                 if t and t.status == "awaiting_approval":
                     t.status = "planned"
             run.status = "running"
-            enqueue(db, "agent.run", org_id=run.org_id, user_id=run.user_id, project_id=run.project_id, payload={"run_id": str(run.id)}, max_attempts=1)
+            enqueue(
+                db,
+                "agent.run",
+                org_id=run.org_id,
+                user_id=run.user_id,
+                project_id=run.project_id,
+                payload={"run_id": str(run.id)},
+                max_attempts=1,
+            )
     return a
 
 
@@ -155,7 +216,9 @@ def _wf_out(db: DB, w: Workflow) -> WorkflowOut:
 
 
 @router.get("/workflows", response_model=list[WorkflowOut])
-def list_workflows(user: CurrentUser, db: DB, org_id: uuid.UUID | None = None, project_id: uuid.UUID | None = None) -> list[WorkflowOut]:
+def list_workflows(
+    user: CurrentUser, db: DB, org_id: uuid.UUID | None = None, project_id: uuid.UUID | None = None
+) -> list[WorkflowOut]:
     scope = resolve_scope(db, user, org_id, project_id)
     q = select(Workflow).where(Workflow.org_id == scope.org_id)
     if scope.project_id:
@@ -170,7 +233,13 @@ def create_workflow(body: WorkflowCreate, user: CurrentUser, db: DB) -> Workflow
         validate_plan(body.definition)
     except PlanError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
-    w = Workflow(org_id=scope.org_id, project_id=scope.project_id, name=body.name, definition=body.definition, created_by=user.id)
+    w = Workflow(
+        org_id=scope.org_id,
+        project_id=scope.project_id,
+        name=body.name,
+        definition=body.definition,
+        created_by=user.id,
+    )
     db.add(w)
     db.flush()
     if body.cron:
@@ -180,9 +249,24 @@ def create_workflow(body: WorkflowCreate, user: CurrentUser, db: DB) -> Workflow
             ZoneInfo(body.timezone)
         except ZoneInfoNotFoundError as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Unknown time zone") from exc
-        db.add(ScheduledJob(workflow_id=w.id, cron=body.cron, timezone=body.timezone, next_run_at=next_run(body.cron, body.timezone, datetime.now(UTC))))
+        db.add(
+            ScheduledJob(
+                workflow_id=w.id,
+                cron=body.cron,
+                timezone=body.timezone,
+                next_run_at=next_run(body.cron, body.timezone, datetime.now(UTC)),
+            )
+        )
         db.flush()
-    audit(db, "workflow.create", user_id=user.id, org_id=scope.org_id, target_type="workflow", target_id=w.id, cron=body.cron)
+    audit(
+        db,
+        "workflow.create",
+        user_id=user.id,
+        org_id=scope.org_id,
+        target_type="workflow",
+        target_id=w.id,
+        cron=body.cron,
+    )
     return _wf_out(db, w)
 
 

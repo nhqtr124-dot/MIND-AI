@@ -288,20 +288,30 @@ PROJECT_TEMPLATES: dict[str, ProjectTemplate] = {
             "Static web app",
             "HTML, CSS and JavaScript single-page app with local storage.",
             "python",
-            ("python", "-m", "http.server", "8000", "--bind", "0.0.0.0"),
+            ("python", "-m", "http.server", "8000", "--bind", "0.0.0.0"),  # noqa: S104 - inside the sandbox container
             ("python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests"),
             8000,
-            {"index.html": _STATIC_INDEX, "styles.css": _STATIC_CSS, "app.js": _STATIC_JS, "tests/test_site.py": _STATIC_TEST},
+            {
+                "index.html": _STATIC_INDEX,
+                "styles.css": _STATIC_CSS,
+                "app.js": _STATIC_JS,
+                "tests/test_site.py": _STATIC_TEST,
+            },
         ),
         ProjectTemplate(
             "python-fastapi",
             "Python FastAPI app",
             "FastAPI JSON API with SQLite storage and a browser UI.",
             "python",
-            ("uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"),
+            ("uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"),  # noqa: S104 - inside the sandbox container
             ("python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests"),
             8000,
-            {"main.py": _FASTAPI_MAIN, "index.html": _FASTAPI_INDEX, "tests/test_main.py": _FASTAPI_TEST, "tests/conftest.py": "import sys, pathlib\nsys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))\n"},
+            {
+                "main.py": _FASTAPI_MAIN,
+                "index.html": _FASTAPI_INDEX,
+                "tests/test_main.py": _FASTAPI_TEST,
+                "tests/conftest.py": "import sys, pathlib\nsys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))\n",
+            },
         ),
         ProjectTemplate(
             "node-http",

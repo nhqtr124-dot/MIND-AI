@@ -64,7 +64,12 @@ def scan_for_malware(path: Path) -> tuple[bool | None, str]:
 
 
 def file_out(f: ProjectFile) -> FileOut:
-    return FileOut.model_validate({**{c: getattr(f, c) for c in FileOut.model_fields if hasattr(f, c)}, "has_text": bool(f.extracted_text)})
+    return FileOut.model_validate(
+        {
+            **{c: getattr(f, c) for c in FileOut.model_fields if hasattr(f, c)},
+            "has_text": bool(f.extracted_text),
+        }
+    )
 
 
 @router.post("", response_model=FileOut, status_code=201, dependencies=[rate_limit("upload", 60)])
@@ -80,7 +85,9 @@ def upload(
     name = safe_name(file.filename or "upload")
     ext = Path(name).suffix.lower()
     if ext not in ALLOWED_EXT:
-        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, f"File type '{ext or 'none'}' is not allowed")
+        raise HTTPException(
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, f"File type '{ext or 'none'}' is not allowed"
+        )
     limit = get_settings().max_upload_mb * 1024 * 1024
     with tempfile.TemporaryDirectory(prefix="mind-up-") as tmp:
         path = Path(tmp) / name
@@ -89,18 +96,33 @@ def upload(
             while chunk := file.file.read(1 << 20):
                 size += len(chunk)
                 if size > limit:
-                    raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, f"File exceeds {get_settings().max_upload_mb} MB")
+                    raise HTTPException(
+                        status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        f"File exceeds {get_settings().max_upload_mb} MB",
+                    )
                 h.update(chunk)
                 out.write(chunk)
         if size == 0:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "File is empty")
         head = path.read_bytes()[:16]
         if ext in MAGIC and not any(head.startswith(m) for m in MAGIC[ext]):
-            raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, f"File content does not match its '{ext}' extension")
+            raise HTTPException(
+                status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, f"File content does not match its '{ext}' extension"
+            )
         clean, scan_detail = scan_for_malware(path)
         if clean is False:
-            audit(db, "file.malware_blocked", user_id=user.id, org_id=scope.org_id, ip=client_ip(request), name=name, detail=scan_detail)
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "File was rejected by the malware scanner")
+            audit(
+                db,
+                "file.malware_blocked",
+                user_id=user.id,
+                org_id=scope.org_id,
+                ip=client_ip(request),
+                name=name,
+                detail=scan_detail,
+            )
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "File was rejected by the malware scanner"
+            )
         text, err = None, None
         try:
             text = extract_text(path)
@@ -118,15 +140,36 @@ def upload(
     )  # fmt: skip
     db.add(f)
     db.flush()
-    audit(db, "file.upload", user_id=user.id, org_id=scope.org_id, target_type="file", target_id=fid, ip=client_ip(request), name=name, size=size, scan=scan_detail)
+    audit(
+        db,
+        "file.upload",
+        user_id=user.id,
+        org_id=scope.org_id,
+        target_type="file",
+        target_id=fid,
+        ip=client_ip(request),
+        name=name,
+        size=size,
+        scan=scan_detail,
+    )
     return file_out(f)
 
 
 @router.get("", response_model=list[FileOut])
-def list_files(user: CurrentUser, db: DB, org_id: uuid.UUID | None = None, project_id: uuid.UUID | None = None, limit: int = 100) -> list[FileOut]:
+def list_files(
+    user: CurrentUser,
+    db: DB,
+    org_id: uuid.UUID | None = None,
+    project_id: uuid.UUID | None = None,
+    limit: int = 100,
+) -> list[FileOut]:
     scope = resolve_scope(db, user, org_id, project_id)
     q = select(ProjectFile).where(ProjectFile.org_id == scope.org_id, ProjectFile.kind == "upload")
-    q = q.where(ProjectFile.project_id == scope.project_id) if scope.project_id else q.where(ProjectFile.project_id.is_(None))
+    q = (
+        q.where(ProjectFile.project_id == scope.project_id)
+        if scope.project_id
+        else q.where(ProjectFile.project_id.is_(None))
+    )
     return [file_out(f) for f in db.scalars(q.order_by(ProjectFile.created_at.desc()).limit(min(limit, 500)))]
 
 
@@ -160,7 +203,13 @@ def download(file_id: uuid.UUID, user: CurrentUser, db: DB, inline: bool = False
 
 def safe_file_response(data: bytes, name: str, mime: str, inline: bool = False) -> Response:
     # Active content (HTML/SVG/JS) is never rendered inline from the API origin.
-    active = mime in ("text/html", "image/svg+xml", "application/javascript", "text/javascript", "application/xhtml+xml")
+    active = mime in (
+        "text/html",
+        "image/svg+xml",
+        "application/javascript",
+        "text/javascript",
+        "application/xhtml+xml",
+    )
     disp = "inline" if inline and not active else "attachment"
     quoted = re.sub(r'["\\\r\n]', "_", name)
     return Response(
@@ -180,4 +229,13 @@ def delete_file(file_id: uuid.UUID, request: Request, user: CurrentUser, db: DB)
     f = _get_file(db, user, file_id, "editor")
     get_storage().delete(f.storage_key)
     db.delete(f)
-    audit(db, "file.delete", user_id=user.id, org_id=f.org_id, target_type="file", target_id=f.id, ip=client_ip(request), name=f.path)
+    audit(
+        db,
+        "file.delete",
+        user_id=user.id,
+        org_id=f.org_id,
+        target_type="file",
+        target_id=f.id,
+        ip=client_ip(request),
+        name=f.path,
+    )

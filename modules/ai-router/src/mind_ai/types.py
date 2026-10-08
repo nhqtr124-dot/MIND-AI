@@ -7,7 +7,9 @@ from decimal import Decimal
 from typing import Literal
 
 Role = Literal["system", "user", "assistant"]
-Capability = Literal["chat", "vision", "tools", "embeddings", "image_generation", "code", "reasoning", "long_context"]
+Capability = Literal[
+    "chat", "vision", "tools", "embeddings", "image_generation", "code", "reasoning", "long_context"
+]
 
 
 @dataclass
@@ -90,7 +92,10 @@ def compute_cost(usage: Usage, pricing: Pricing) -> Decimal | None:
         return None
     assert pricing.input_per_mtok is not None and pricing.output_per_mtok is not None
     mtok = Decimal(1_000_000)
-    return (Decimal(usage.input_tokens) * pricing.input_per_mtok + Decimal(usage.output_tokens) * pricing.output_per_mtok) / mtok
+    return (
+        Decimal(usage.input_tokens) * pricing.input_per_mtok
+        + Decimal(usage.output_tokens) * pricing.output_per_mtok
+    ) / mtok
 
 
 def estimate_tokens(text: str) -> int:

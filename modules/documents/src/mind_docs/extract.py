@@ -10,7 +10,21 @@ import tempfile
 from html.parser import HTMLParser
 from pathlib import Path
 
-TEXT_TYPES = {".txt", ".md", ".markdown", ".json", ".py", ".ts", ".tsx", ".js", ".css", ".yaml", ".yml", ".toml", ".sql"}
+TEXT_TYPES = {
+    ".txt",
+    ".md",
+    ".markdown",
+    ".json",
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".css",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".sql",
+}
 SUPPORTED = TEXT_TYPES | {".pdf", ".docx", ".pptx", ".xlsx", ".csv", ".html", ".htm"}
 
 

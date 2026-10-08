@@ -13,7 +13,18 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
-from mind_ai import ChatMessage, ChatRequest, NoEligibleModel, Pricing, ProviderError, Usage, classify, compute_cost, estimate_tokens, select_model
+from mind_ai import (
+    ChatMessage,
+    ChatRequest,
+    NoEligibleModel,
+    Pricing,
+    ProviderError,
+    Usage,
+    classify,
+    compute_cost,
+    estimate_tokens,
+    select_model,
+)
 
 from ..db import session_scope
 from ..models import Organization
@@ -64,7 +75,9 @@ async def complete(
     try:
         order = await asyncio.to_thread(_pick)
     except NoEligibleModel as exc:
-        raise LLMUnavailable("No enabled chat model is configured. Add a provider in Settings → AI providers.") from exc
+        raise LLMUnavailable(
+            "No enabled chat model is configured. Add a provider in Settings → AI providers."
+        ) from exc
     except BudgetExceeded as exc:
         raise LLMUnavailable(str(exc)) from exc
 
@@ -72,7 +85,14 @@ async def complete(
     for m in order:
         adapter = adapter_for(m.provider)
         try:
-            text, usage, _ = await adapter.complete(ChatRequest(m.model_name, [ChatMessage("user", prompt)], system=system, max_output_tokens=max_output_tokens))
+            text, usage, _ = await adapter.complete(
+                ChatRequest(
+                    m.model_name,
+                    [ChatMessage("user", prompt)],
+                    system=system,
+                    max_output_tokens=max_output_tokens,
+                )
+            )
         except ProviderError as exc:
             errors.append(f"{m.model_name}: {exc.message}")
             continue

@@ -16,7 +16,9 @@ def _contents(req: ChatRequest) -> list[dict[str, Any]]:
     for m in req.messages:
         if m.role == "system":
             continue
-        parts: list[dict[str, Any]] = [{"inline_data": {"mime_type": i.mime_type, "data": i.data_b64}} for i in m.images]
+        parts: list[dict[str, Any]] = [
+            {"inline_data": {"mime_type": i.mime_type, "data": i.data_b64}} for i in m.images
+        ]
         parts.append({"text": m.text})
         out.append({"role": "model" if m.role == "assistant" else "user", "parts": parts})
     return out
@@ -62,8 +64,13 @@ class GeminiAdapter(ProviderAdapter):
         return out
 
     async def stream_chat(self, req: ChatRequest) -> AsyncIterator[StreamEvent]:  # type: ignore[override]
-        system = "\n\n".join(filter(None, [req.system, *[m.text for m in req.messages if m.role == "system"]]))
-        body: dict[str, Any] = {"contents": _contents(req), "generationConfig": {"maxOutputTokens": req.max_output_tokens}}
+        system = "\n\n".join(
+            filter(None, [req.system, *[m.text for m in req.messages if m.role == "system"]])
+        )
+        body: dict[str, Any] = {
+            "contents": _contents(req),
+            "generationConfig": {"maxOutputTokens": req.max_output_tokens},
+        }
         if req.temperature is not None:
             body["generationConfig"]["temperature"] = req.temperature
         if system:
@@ -77,7 +84,9 @@ class GeminiAdapter(ProviderAdapter):
             except ValueError:
                 continue
             if "error" in chunk:
-                raise ProviderError("unknown", f"gemini stream error: {chunk['error'].get('message')}", provider=self.kind)
+                raise ProviderError(
+                    "unknown", f"gemini stream error: {chunk['error'].get('message')}", provider=self.kind
+                )
             for cand in chunk.get("candidates") or []:
                 for part in (cand.get("content") or {}).get("parts") or []:
                     if part.get("text") and not part.get("thought"):
@@ -85,12 +94,19 @@ class GeminiAdapter(ProviderAdapter):
                 finish = cand.get("finishReason") or finish
             um = chunk.get("usageMetadata")
             if um:
-                usage = Usage(int(um.get("promptTokenCount") or 0), int(um.get("candidatesTokenCount") or 0) + int(um.get("thoughtsTokenCount") or 0))
+                usage = Usage(
+                    int(um.get("promptTokenCount") or 0),
+                    int(um.get("candidatesTokenCount") or 0) + int(um.get("thoughtsTokenCount") or 0),
+                )
         if usage is not None:
             yield StreamEvent("usage", usage=usage)
         yield StreamEvent("done", finish_reason=finish)
 
     async def embed(self, model: str, texts: list[str]) -> EmbeddingResult:
-        body = {"requests": [{"model": f"models/{model}", "content": {"parts": [{"text": t}]}} for t in texts]}
-        data = await self._request_json("POST", f"{self.base_url}/models/{model}:batchEmbedContents", json=body)
+        body = {
+            "requests": [{"model": f"models/{model}", "content": {"parts": [{"text": t}]}} for t in texts]
+        }
+        data = await self._request_json(
+            "POST", f"{self.base_url}/models/{model}:batchEmbedContents", json=body
+        )
         return EmbeddingResult([e["values"] for e in data.get("embeddings", [])], Usage())

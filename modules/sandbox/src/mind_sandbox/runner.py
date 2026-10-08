@@ -82,19 +82,36 @@ def docker_available() -> bool:
     if shutil.which("docker") is None:
         return False
     try:
-        return subprocess.run(["docker", "info", "--format", "{{.ServerVersion}}"], capture_output=True, timeout=10, check=False).returncode == 0
+        return (
+            subprocess.run(
+                ["docker", "info", "--format", "{{.ServerVersion}}"],
+                capture_output=True,
+                timeout=10,
+                check=False,
+            ).returncode
+            == 0
+        )
     except (OSError, subprocess.TimeoutExpired):
         return False
 
 
 def image_present(image: str) -> bool:
-    return subprocess.run(["docker", "image", "inspect", image], capture_output=True, check=False).returncode == 0
+    return (
+        subprocess.run(["docker", "image", "inspect", image], capture_output=True, check=False).returncode
+        == 0
+    )
 
 
 def ensure_network() -> None:
-    probe = subprocess.run(["docker", "network", "inspect", PREVIEW_NETWORK], capture_output=True, check=False)
+    probe = subprocess.run(
+        ["docker", "network", "inspect", PREVIEW_NETWORK], capture_output=True, check=False
+    )
     if probe.returncode != 0:
-        subprocess.run(["docker", "network", "create", "--internal", "--label", LABEL, PREVIEW_NETWORK], capture_output=True, check=True)
+        subprocess.run(
+            ["docker", "network", "create", "--internal", "--label", LABEL, PREVIEW_NETWORK],
+            capture_output=True,
+            check=True,
+        )
 
 
 def resolve_image(runtime: str) -> str:
@@ -118,7 +135,7 @@ def _security_flags(limits: Limits) -> list[str]:
         "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges",
         "--read-only",
-        "--tmpfs", f"/tmp:rw,nosuid,size={limits.tmpfs_mb}m",
+        "--tmpfs", f"/tmp:rw,nosuid,size={limits.tmpfs_mb}m",  # noqa: S108 - path inside the container
         "--user", "10001:10001",
         "--label", LABEL,
     ]  # fmt: skip
@@ -133,7 +150,7 @@ def materialize(files: Mapping[str, bytes | str], root: Path | None = None) -> P
             raise SandboxError(f"path escapes workspace: {rel}")
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(content.encode() if isinstance(content, str) else content)
-    for dirpath, dirnames, filenames in os.walk(base):
+    for dirpath, _dirnames, filenames in os.walk(base):
         os.chmod(dirpath, 0o777)  # noqa: S103 - throwaway dir; container runs as uid 10001
         for f in filenames:
             os.chmod(os.path.join(dirpath, f), 0o666)  # noqa: S103
@@ -160,7 +177,16 @@ def run(
     name = f"mind-run-{uuid.uuid4().hex[:12]}"
     args = ["docker", "run", "--rm", "--name", name, *_security_flags(limits)]
     args += ["--network", "none" if network == "none" else "bridge"]
-    args += ["-v", f"{workdir}:/workspace:rw", "-w", "/workspace", "-e", "HOME=/tmp", "-e", "PYTHONDONTWRITEBYTECODE=1"]
+    args += [
+        "-v",
+        f"{workdir}:/workspace:rw",
+        "-w",
+        "/workspace",
+        "-e",
+        "HOME=/tmp",
+        "-e",
+        "PYTHONDONTWRITEBYTECODE=1",
+    ]
     for k, v in (env or {}).items():
         args += ["-e", f"{k}={v}"]
     args += [image, *command]
@@ -189,21 +215,40 @@ def run(
     )
 
 
-def start_service(workdir: Path, command: list[str], port: int, runtime: str = "python", limits: Limits | None = None) -> ServiceHandle:
+def start_service(
+    workdir: Path, command: list[str], port: int, runtime: str = "python", limits: Limits | None = None
+) -> ServiceHandle:
     """Start a long-running preview server on the internal (no-internet) network."""
     limits = limits or Limits(memory_mb=512, cpus=1.0)
     image = resolve_image(runtime)
     ensure_network()
     name = f"mind-preview-{uuid.uuid4().hex[:12]}"
     args = ["docker", "run", "-d", "--name", name, *_security_flags(limits), "--network", PREVIEW_NETWORK]
-    args += ["-v", f"{workdir}:/workspace:rw", "-w", "/workspace", "-e", "HOME=/tmp", "-e", f"PORT={port}", image, *command]
+    args += [
+        "-v",
+        f"{workdir}:/workspace:rw",
+        "-w",
+        "/workspace",
+        "-e",
+        "HOME=/tmp",
+        "-e",
+        f"PORT={port}",
+        image,
+        *command,
+    ]
     proc = subprocess.run(args, capture_output=True, check=False)
     if proc.returncode != 0:
         raise SandboxError(f"failed to start preview: {proc.stderr.decode(errors='replace')[-500:]}")
     cid = proc.stdout.decode().strip()
-    ip = subprocess.run(
-        ["docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", cid], capture_output=True, check=True
-    ).stdout.decode().strip()
+    ip = (
+        subprocess.run(
+            ["docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", cid],
+            capture_output=True,
+            check=True,
+        )
+        .stdout.decode()
+        .strip()
+    )
     return ServiceHandle(cid, name, ip, port, str(workdir), image)
 
 
@@ -226,12 +271,16 @@ def wait_until_ready(handle: ServiceHandle, timeout_s: float = 20.0) -> bool:
 
 
 def is_running(container_id: str) -> bool:
-    p = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", container_id], capture_output=True, check=False)
+    p = subprocess.run(
+        ["docker", "inspect", "-f", "{{.State.Running}}", container_id], capture_output=True, check=False
+    )
     return p.returncode == 0 and p.stdout.decode().strip() == "true"
 
 
 def logs(container_id: str, tail: int = 200) -> str:
-    p = subprocess.run(["docker", "logs", "--tail", str(tail), container_id], capture_output=True, check=False)
+    p = subprocess.run(
+        ["docker", "logs", "--tail", str(tail), container_id], capture_output=True, check=False
+    )
     return _trim(p.stdout + p.stderr)[0]
 
 
@@ -243,10 +292,20 @@ def cleanup_stale(max_age_s: float = 3600) -> int:
     """Remove sandbox containers older than max_age_s. Returns the number removed."""
     from datetime import datetime
 
-    ids = subprocess.run(["docker", "ps", "-aq", "--filter", f"label={LABEL}"], capture_output=True, check=False).stdout.decode().split()
+    ids = (
+        subprocess.run(
+            ["docker", "ps", "-aq", "--filter", f"label={LABEL}"], capture_output=True, check=False
+        )
+        .stdout.decode()
+        .split()
+    )
     removed = 0
     for cid in ids:
-        created = subprocess.run(["docker", "inspect", "-f", "{{.Created}}", cid], capture_output=True, check=False).stdout.decode().strip()
+        created = (
+            subprocess.run(["docker", "inspect", "-f", "{{.Created}}", cid], capture_output=True, check=False)
+            .stdout.decode()
+            .strip()
+        )
         try:
             # Docker reports RFC 3339 with nanoseconds; seconds precision is enough here.
             ts = datetime.fromisoformat(created[:19] + "+00:00").timestamp()

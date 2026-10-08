@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import pytest
-
 from mind_docs import (
     DocumentSpec,
     PresentationSpec,
@@ -25,10 +24,19 @@ SPEC = DocumentSpec.model_validate(
         "subtitle": "Season summary",
         "blocks": [
             {"type": "heading", "text": "Overview", "level": 1},
-            {"type": "paragraph", "text": "The team built three robots and competed in two regional events this season."},
+            {
+                "type": "paragraph",
+                "text": "The team built three robots and competed in two regional events this season.",
+            },
             {"type": "bullets", "items": ["Drive train redesign", "Vision tracking"]},
             {"type": "table", "columns": ["Event", "Rank"], "rows": [["Regional A", 4], ["Regional B", 2]]},
-            {"type": "chart", "kind": "bar", "title": "Points", "labels": ["A", "B"], "series": [{"name": "pts", "values": [40, 55]}]},
+            {
+                "type": "chart",
+                "kind": "bar",
+                "title": "Points",
+                "labels": ["A", "B"],
+                "series": [{"name": "pts", "values": [40, 55]}],
+            },
             {"type": "heading", "text": "Next steps", "level": 2},
             {"type": "code", "text": "print('hello')", "language": "python"},
         ],
@@ -52,7 +60,14 @@ def test_validator_detects_wrong_content(tmp_path: Path) -> None:
 
 
 def test_arabic_pdf_and_docx(tmp_path: Path) -> None:
-    spec = DocumentSpec(title="تقرير الفريق", language="ar", blocks=[{"type": "heading", "text": "نظرة عامة", "level": 1}, {"type": "paragraph", "text": "بنى الفريق ثلاثة روبوتات هذا الموسم"}])  # type: ignore[list-item]
+    spec = DocumentSpec(
+        title="تقرير الفريق",
+        language="ar",
+        blocks=[
+            {"type": "heading", "text": "نظرة عامة", "level": 1},
+            {"type": "paragraph", "text": "بنى الفريق ثلاثة روبوتات هذا الموسم"},
+        ],
+    )  # type: ignore[list-item]
     for fmt in ("pdf", "docx"):
         out = render_document(spec, fmt, tmp_path / f"ar.{fmt}")
         v = validate_document(out, fmt, spec)
@@ -64,9 +79,23 @@ def test_pptx(tmp_path: Path) -> None:
         {
             "title": "Kickoff",
             "slides": [
-                {"title": "Goals", "bullets": ["Win regional", "Document everything"], "notes": "speak slowly"},
-                {"title": "Budget", "table": {"type": "table", "columns": ["Item", "Cost"], "rows": [["Motors", 120]]}},
-                {"title": "Scores", "chart": {"type": "chart", "labels": ["Q1", "Q2"], "series": [{"name": "s", "values": [1, 2]}]}},
+                {
+                    "title": "Goals",
+                    "bullets": ["Win regional", "Document everything"],
+                    "notes": "speak slowly",
+                },
+                {
+                    "title": "Budget",
+                    "table": {"type": "table", "columns": ["Item", "Cost"], "rows": [["Motors", 120]]},
+                },
+                {
+                    "title": "Scores",
+                    "chart": {
+                        "type": "chart",
+                        "labels": ["Q1", "Q2"],
+                        "series": [{"name": "s", "values": [1, 2]}],
+                    },
+                },
             ],
         }
     )
@@ -90,7 +119,9 @@ def _budget() -> WorkbookSpec:
                         ["Sum", None, None, "=SUM(D2:D4)"],
                         ["Average", None, None, "=AVERAGE(D2:D4)"],
                     ],
-                    "charts": [{"kind": "bar", "title": "Cost", "data_range": "D1:D4", "categories_range": "A2:A4"}],
+                    "charts": [
+                        {"kind": "bar", "title": "Cost", "data_range": "D1:D4", "categories_range": "A2:A4"}
+                    ],
                 }
             ],
             "expected": {"Budget!D5": 291, "Budget!D2": 120},

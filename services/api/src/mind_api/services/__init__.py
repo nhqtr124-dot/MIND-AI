@@ -2,4 +2,12 @@
 
 
 def register_handlers() -> None:
-    from . import agents, builder, cad_service, docs_service, image_service, memory_service, research_service  # noqa: F401
+    from . import (  # noqa: F401
+        agents,
+        builder,
+        cad_service,
+        docs_service,
+        image_service,
+        memory_service,
+        research_service,
+    )

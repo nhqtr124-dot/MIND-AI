@@ -10,7 +10,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 Role = Literal["owner", "admin", "editor", "viewer"]
-State = Literal["planned", "running", "awaiting_approval", "completed", "failed", "cancelled", "partially_completed"]
+State = Literal[
+    "planned", "running", "awaiting_approval", "completed", "failed", "cancelled", "partially_completed"
+]
 
 
 class ORM(BaseModel):
@@ -59,7 +61,7 @@ class PasswordChange(BaseModel):
 class TokenOut(BaseModel):
     access_token: str
     refresh_token: str
-    token_type: Literal["bearer"] = "bearer"
+    token_type: Literal["bearer"] = "bearer"  # noqa: S105 - not a secret
     expires_in: int
     csrf_token: str
     user: UserOut
@@ -120,7 +122,9 @@ class InviteOut(BaseModel):
     accepted_at: datetime | None
     revoked_at: datetime | None
     created_at: datetime
-    token: str | None = Field(None, description="Only returned once, at creation. Share the accept link with the invitee.")
+    token: str | None = Field(
+        None, description="Only returned once, at creation. Share the accept link with the invitee."
+    )
     accept_url: str | None = None
 
 
@@ -312,7 +316,9 @@ class ModelConfigOut(ORM):
     provider_status: str = ""
 
 
-Capability = Literal["chat", "vision", "tools", "embeddings", "image_generation", "code", "reasoning", "long_context"]
+Capability = Literal[
+    "chat", "vision", "tools", "embeddings", "image_generation", "code", "reasoning", "long_context"
+]
 
 
 class ModelConfigUpdate(BaseModel):
@@ -396,9 +402,15 @@ class ConversationDetail(ConversationOut):
 class SendMessageIn(BaseModel):
     content: str = Field(min_length=1, max_length=200_000)
     attachments: list[uuid.UUID] = Field(default_factory=list, max_length=20)
-    parent_id: uuid.UUID | None = Field(None, description="Message to reply under; defaults to the conversation's current leaf")
-    edit_of: uuid.UUID | None = Field(None, description="Edit a previous user message: the new message becomes its sibling")
-    model_config_id: uuid.UUID | None = Field(None, description="One-turn override, e.g. after accepting a fallback model")
+    parent_id: uuid.UUID | None = Field(
+        None, description="Message to reply under; defaults to the conversation's current leaf"
+    )
+    edit_of: uuid.UUID | None = Field(
+        None, description="Edit a previous user message: the new message becomes its sibling"
+    )
+    model_config_id: uuid.UUID | None = Field(
+        None, description="One-turn override, e.g. after accepting a fallback model"
+    )
     max_output_tokens: int = Field(2048, ge=16, le=64000)
     stream: bool = True
 
@@ -430,7 +442,10 @@ class RunCreate(BaseModel):
     org_id: uuid.UUID | None = None
     project_id: uuid.UUID | None = None
     goal: str = Field(min_length=1, max_length=20_000)
-    plan: dict[str, Any] | None = Field(None, description="Optional explicit plan {tasks:[...]}; omitted -> the Orchestrator plans with an LLM")
+    plan: dict[str, Any] | None = Field(
+        None,
+        description="Optional explicit plan {tasks:[...]}; omitted -> the Orchestrator plans with an LLM",
+    )
     budget_usd: Decimal | None = Field(None, ge=0)
     time_limit_s: int = Field(900, ge=10, le=7200)
 

@@ -12,8 +12,8 @@ from .config import get_settings
 from .db import session_scope
 from .jobs import claim, reclaim_expired, run_job, worker_id
 from .services import register_handlers
-from .services.scheduler import enqueue_due_workflows
 from .services.previews import reap_idle_previews
+from .services.scheduler import enqueue_due_workflows
 
 log = logging.getLogger("mind.worker")
 

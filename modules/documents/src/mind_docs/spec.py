@@ -76,7 +76,9 @@ class PageBreak(BaseModel):
     type: Literal["page_break"] = "page_break"
 
 
-Block = Annotated[Heading | Paragraph | BulletList | Table | Chart | Code | PageBreak, Field(discriminator="type")]
+Block = Annotated[
+    Heading | Paragraph | BulletList | Table | Chart | Code | PageBreak, Field(discriminator="type")
+]
 
 
 class DocumentSpec(BaseModel):

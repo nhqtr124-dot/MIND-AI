@@ -101,7 +101,10 @@ def generate_part(
                 warnings.append(f"3MF export failed for {part.name}")
 
         report: ValidationReport = validate_mesh(
-            stl, expected_extents=part.expected_extents, require_watertight=part.needs_watertight, settings=settings
+            stl,
+            expected_extents=part.expected_extents,
+            require_watertight=part.needs_watertight,
+            settings=settings,
         )
         report.checks.insert(
             0,
@@ -114,7 +117,9 @@ def generate_part(
         )
         if not brep_valid:
             report.status = "validation_failed"
-        parts.append(PartReport(part.name, brep_valid, [round(v, 4) for v in part.expected_extents], report.to_dict()))
+        parts.append(
+            PartReport(part.name, brep_valid, [round(v, 4) for v in part.expected_extents], report.to_dict())
+        )
         vol = report.metrics.get("volume_mm3")
         bom.append(
             {
@@ -122,7 +127,9 @@ def generate_part(
                 "type": "printed part",
                 "quantity": 1,
                 "volume_cm3": round(float(vol) / 1000, 2) if isinstance(vol, (int, float)) else None,
-                "est_mass_g_pla_solid": round(float(vol) / 1000 * PLA_DENSITY_G_CM3, 1) if isinstance(vol, (int, float)) else None,
+                "est_mass_g_pla_solid": round(float(vol) / 1000 * PLA_DENSITY_G_CM3, 1)
+                if isinstance(vol, (int, float))
+                else None,
             }
         )
 

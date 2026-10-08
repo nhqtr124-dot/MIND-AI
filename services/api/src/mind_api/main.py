@@ -11,13 +11,32 @@ from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
 from .config import get_settings
-from .routers import admin, agents, artifacts, auth, builder, chat, files, jobs, memory, orgs, projects, providers, studios
+from .routers import (
+    admin,
+    agents,
+    artifacts,
+    auth,
+    builder,
+    chat,
+    files,
+    jobs,
+    memory,
+    orgs,
+    projects,
+    providers,
+    studios,
+)
 from .services import register_handlers
 
 
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
-        data = {"ts": self.formatTime(record), "level": record.levelname, "logger": record.name, "msg": record.getMessage()}
+        data = {
+            "ts": self.formatTime(record),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
         for k in ("request_id", "method", "path", "status", "ms"):
             if hasattr(record, k):
                 data[k] = getattr(record, k)
@@ -64,7 +83,10 @@ def create_app() -> FastAPI:
         try:
             response: Response = await call_next(request)
         except Exception:
-            log.exception("unhandled error", extra={"request_id": rid, "method": request.method, "path": request.url.path})
+            log.exception(
+                "unhandled error",
+                extra={"request_id": rid, "method": request.method, "path": request.url.path},
+            )
             response = JSONResponse({"detail": "Internal server error", "request_id": rid}, status_code=500)
         response.headers["X-Request-ID"] = rid
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -72,10 +94,33 @@ def create_app() -> FastAPI:
         response.headers.setdefault("X-Frame-Options", "DENY")
         if s.cookie_secure:
             response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-        log.info("request", extra={"request_id": rid, "method": request.method, "path": request.url.path, "status": response.status_code, "ms": round((time.monotonic() - start) * 1000, 1)})
+        log.info(
+            "request",
+            extra={
+                "request_id": rid,
+                "method": request.method,
+                "path": request.url.path,
+                "status": response.status_code,
+                "ms": round((time.monotonic() - start) * 1000, 1),
+            },
+        )
         return response
 
-    for r in (auth, orgs, projects, files, artifacts, jobs, providers, chat, studios, agents, memory, builder, admin):
+    for r in (
+        auth,
+        orgs,
+        projects,
+        files,
+        artifacts,
+        jobs,
+        providers,
+        chat,
+        studios,
+        agents,
+        memory,
+        builder,
+        admin,
+    ):
         app.include_router(r.router, prefix="/api/v1")
     return app
 

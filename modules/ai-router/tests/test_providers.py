@@ -9,7 +9,6 @@ from collections.abc import Callable
 
 import httpx
 import pytest
-
 from mind_ai import ChatMessage, ChatRequest, ImagePart, ProviderError, make_adapter, with_retries
 
 
@@ -39,7 +38,11 @@ async def test_openai_stream() -> None:
     seen: dict = {}
 
     def h(r: httpx.Request) -> httpx.Response:
-        seen["url"], seen["auth"], seen["body"] = str(r.url), r.headers["authorization"], json.loads(r.content)
+        seen["url"], seen["auth"], seen["body"] = (
+            str(r.url),
+            r.headers["authorization"],
+            json.loads(r.content),
+        )
         body = sse(
             (None, {"choices": [{"delta": {"content": "Hel"}, "finish_reason": None}]}),
             (None, {"choices": [{"delta": {"content": "lo"}, "finish_reason": "stop"}]}),
@@ -65,7 +68,9 @@ async def test_openai_compatible_uses_max_tokens_and_base_url() -> None:
 
     def h(r: httpx.Request) -> httpx.Response:
         seen["url"], seen["body"] = str(r.url), json.loads(r.content)
-        return httpx.Response(200, content=sse((None, {"choices": [{"delta": {"content": "x"}}]}), (None, "[DONE]")))
+        return httpx.Response(
+            200, content=sse((None, {"choices": [{"delta": {"content": "x"}}]}), (None, "[DONE]"))
+        )
 
     a = make_adapter("openai_compatible", None, "http://local:8080/v1", client=client(h))
     text, usage, _ = await a.complete(REQ)
@@ -75,10 +80,26 @@ async def test_openai_compatible_uses_max_tokens_and_base_url() -> None:
 
 async def test_openai_models_filtering() -> None:
     def h(r: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"data": [{"id": "chat-a"}, {"id": "text-embedding-x"}, {"id": "whisper-1"}, {"id": "gpt-image-z"}]})
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {"id": "chat-a"},
+                    {"id": "text-embedding-x"},
+                    {"id": "whisper-1"},
+                    {"id": "gpt-image-z"},
+                ]
+            },
+        )
 
-    models = {m.name: m.capabilities for m in await make_adapter("openai", "k", client=client(h)).list_models()}
-    assert models == {"chat-a": {"chat"}, "text-embedding-x": {"embeddings"}, "gpt-image-z": {"image_generation"}}
+    models = {
+        m.name: m.capabilities for m in await make_adapter("openai", "k", client=client(h)).list_models()
+    }
+    assert models == {
+        "chat-a": {"chat"},
+        "text-embedding-x": {"embeddings"},
+        "gpt-image-z": {"image_generation"},
+    }
 
 
 async def test_anthropic_stream() -> None:
@@ -87,11 +108,27 @@ async def test_anthropic_stream() -> None:
     def h(r: httpx.Request) -> httpx.Response:
         seen["headers"], seen["body"], seen["url"] = r.headers, json.loads(r.content), str(r.url)
         body = sse(
-            ("message_start", {"type": "message_start", "message": {"usage": {"input_tokens": 20, "output_tokens": 1}}}),
+            (
+                "message_start",
+                {"type": "message_start", "message": {"usage": {"input_tokens": 20, "output_tokens": 1}}},
+            ),
             ("ping", {"type": "ping"}),
-            ("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Hi "}}),
-            ("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "there"}}),
-            ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 3}}),
+            (
+                "content_block_delta",
+                {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Hi "}},
+            ),
+            (
+                "content_block_delta",
+                {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "there"}},
+            ),
+            (
+                "message_delta",
+                {
+                    "type": "message_delta",
+                    "delta": {"stop_reason": "end_turn"},
+                    "usage": {"output_tokens": 3},
+                },
+            ),
             ("message_stop", {"type": "message_stop"}),
         )
         return httpx.Response(200, content=body)
@@ -109,7 +146,12 @@ async def test_anthropic_stream() -> None:
 
 async def test_anthropic_stream_error_event() -> None:
     def h(r: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, content=sse(("error", {"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}})))
+        return httpx.Response(
+            200,
+            content=sse(
+                ("error", {"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}})
+            ),
+        )
 
     with pytest.raises(ProviderError) as ei:
         await make_adapter("anthropic", "ak", client=client(h)).complete(REQ)
@@ -122,7 +164,9 @@ async def test_anthropic_models_pagination() -> None:
     def h(r: httpx.Request) -> httpx.Response:
         calls.append(dict(r.url.params))
         if "after_id" not in r.url.params:
-            return httpx.Response(200, json={"data": [{"id": "a", "display_name": "A"}], "has_more": True, "last_id": "a"})
+            return httpx.Response(
+                200, json={"data": [{"id": "a", "display_name": "A"}], "has_more": True, "last_id": "a"}
+            )
         return httpx.Response(200, json={"data": [{"id": "b", "display_name": "B"}], "has_more": False})
 
     models = await make_adapter("anthropic", "k", client=client(h)).list_models()
@@ -139,18 +183,33 @@ async def test_gemini_stream_and_models() -> None:
                 200,
                 json={
                     "models": [
-                        {"name": "models/g-chat", "displayName": "G", "inputTokenLimit": 1000, "supportedGenerationMethods": ["generateContent"]},
+                        {
+                            "name": "models/g-chat",
+                            "displayName": "G",
+                            "inputTokenLimit": 1000,
+                            "supportedGenerationMethods": ["generateContent"],
+                        },
                         {"name": "models/g-embed", "supportedGenerationMethods": ["embedContent"]},
                         {"name": "models/other", "supportedGenerationMethods": ["predict"]},
                     ]
                 },
             )
-        seen["url"], seen["key"], seen["body"] = str(r.url), r.headers["x-goog-api-key"], json.loads(r.content)
+        seen["url"], seen["key"], seen["body"] = (
+            str(r.url),
+            r.headers["x-goog-api-key"],
+            json.loads(r.content),
+        )
         return httpx.Response(
             200,
             content=sse(
                 (None, {"candidates": [{"content": {"parts": [{"text": "Bon"}]}}]}),
-                (None, {"candidates": [{"content": {"parts": [{"text": "jour"}]}, "finishReason": "STOP"}], "usageMetadata": {"promptTokenCount": 7, "candidatesTokenCount": 2}}),
+                (
+                    None,
+                    {
+                        "candidates": [{"content": {"parts": [{"text": "jour"}]}, "finishReason": "STOP"}],
+                        "usageMetadata": {"promptTokenCount": 7, "candidatesTokenCount": 2},
+                    },
+                ),
             ),
         )
 
@@ -164,7 +223,15 @@ async def test_gemini_stream_and_models() -> None:
     assert seen["body"]["contents"][0]["parts"][0]["inline_data"]["mime_type"] == "image/png"
 
 
-@pytest.mark.parametrize(("status", "kind", "retryable"), [(401, "auth", False), (429, "rate_limit", True), (500, "unavailable", True), (400, "invalid_request", False)])
+@pytest.mark.parametrize(
+    ("status", "kind", "retryable"),
+    [
+        (401, "auth", False),
+        (429, "rate_limit", True),
+        (500, "unavailable", True),
+        (400, "invalid_request", False),
+    ],
+)
 async def test_http_errors_are_categorised_and_redacted(status: int, kind: str, retryable: bool) -> None:
     def h(r: httpx.Request) -> httpx.Response:
         return httpx.Response(status, json={"error": {"message": "bad key sk-secret-123"}})
@@ -208,7 +275,13 @@ async def test_retries_only_retryable() -> None:
 async def test_openai_embeddings_and_images() -> None:
     def h(r: httpx.Request) -> httpx.Response:
         if r.url.path.endswith("/embeddings"):
-            return httpx.Response(200, json={"data": [{"index": 1, "embedding": [0.2]}, {"index": 0, "embedding": [0.1]}], "usage": {"prompt_tokens": 4}})
+            return httpx.Response(
+                200,
+                json={
+                    "data": [{"index": 1, "embedding": [0.2]}, {"index": 0, "embedding": [0.1]}],
+                    "usage": {"prompt_tokens": 4},
+                },
+            )
         return httpx.Response(200, json={"data": [{"b64_json": "iVBORw0KGgo="}]})
 
     a = make_adapter("openai", "k", client=client(h))

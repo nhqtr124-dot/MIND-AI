@@ -88,7 +88,11 @@ def validate_mesh(
         failed = any(c.status == "fail" and c.critical for c in checks)
         warned = any(c.status in ("warn", "fail") for c in checks)
         status: OverallStatus = (
-            "validation_failed" if failed else "printable_with_warnings" if warned else "print_ready_checks_passed"
+            "validation_failed"
+            if failed
+            else "printable_with_warnings"
+            if warned
+            else "print_ready_checks_passed"
         )
         return ValidationReport(file=path.name, status=status, checks=checks, metrics=metrics)
 
@@ -108,7 +112,9 @@ def validate_mesh(
         checks.append(Check("load", "Mesh loads", "fail", f"unexpected type {type(loaded).__name__}"))
         return finish()
     mesh = loaded
-    checks.append(Check("load", "Mesh loads", "pass", f"{len(mesh.vertices)} vertices, {len(mesh.faces)} faces"))
+    checks.append(
+        Check("load", "Mesh loads", "pass", f"{len(mesh.vertices)} vertices, {len(mesh.faces)} faces")
+    )
 
     # 3. nonempty
     if len(mesh.faces) == 0:
@@ -133,15 +139,45 @@ def validate_mesh(
     else:
         largest = max(extents)
         if largest < 2:
-            checks.append(Check("dimensions", "Plausible units", "warn", f"largest extent {largest} — file may be in metres or inches", False))
+            checks.append(
+                Check(
+                    "dimensions",
+                    "Plausible units",
+                    "warn",
+                    f"largest extent {largest} — file may be in metres or inches",
+                    False,
+                )
+            )
         elif largest > 2000:
-            checks.append(Check("dimensions", "Plausible units", "warn", f"largest extent {largest} — file may be in microns", False))
+            checks.append(
+                Check(
+                    "dimensions",
+                    "Plausible units",
+                    "warn",
+                    f"largest extent {largest} — file may be in microns",
+                    False,
+                )
+            )
         else:
-            checks.append(Check("dimensions", "Plausible units", "pass", f"extents {extents}, interpreted as millimetres", False))
+            checks.append(
+                Check(
+                    "dimensions",
+                    "Plausible units",
+                    "pass",
+                    f"extents {extents}, interpreted as millimetres",
+                    False,
+                )
+            )
     bv = settings.build_volume
     fits = all(e <= b for e, b in zip(sorted(extents), sorted(bv), strict=True))
     checks.append(
-        Check("build_volume", "Fits build volume", "pass" if fits else "warn", f"build volume {list(bv)} mm", critical=False)
+        Check(
+            "build_volume",
+            "Fits build volume",
+            "pass" if fits else "warn",
+            f"build volume {list(bv)} mm",
+            critical=False,
+        )
     )
 
     # 5. watertight
@@ -169,9 +205,13 @@ def validate_mesh(
         st = m.status()
         ok = st == manifold3d.Error.NoError
         metrics["genus"] = int(m.genus()) if ok else -1
-        checks.append(Check("manifold", "Manifold geometry", "pass" if ok else "fail", f"manifold3d status: {st.name}"))
+        checks.append(
+            Check("manifold", "Manifold geometry", "pass" if ok else "fail", f"manifold3d status: {st.name}")
+        )
     except ImportError:
-        checks.append(Check("manifold", "Manifold geometry", "not_checked", "manifold3d not installed", False))
+        checks.append(
+            Check("manifold", "Manifold geometry", "not_checked", "manifold3d not installed", False)
+        )
 
     # 7. degenerate faces
     areas = mesh.area_faces
@@ -196,7 +236,9 @@ def validate_mesh(
             "normals",
             "Consistent outward normals",
             "pass" if normals_ok and watertight else ("warn" if winding else "fail"),
-            f"winding consistent: {winding}; signed volume: {volume:.3f} mm^3" if watertight else f"winding consistent: {winding}",
+            f"winding consistent: {winding}; signed volume: {volume:.3f} mm^3"
+            if watertight
+            else f"winding consistent: {winding}",
         )
     )
     if watertight:
@@ -247,7 +289,9 @@ def validate_mesh(
                 "overhangs",
                 f"Overhangs steeper than {settings.max_overhang_deg} deg",
                 "pass" if frac < 0.02 else "warn",
-                f"{frac * 100:.1f}% of surface area in the current orientation; supports may be needed" if frac >= 0.02 else f"{frac * 100:.1f}% of surface area",
+                f"{frac * 100:.1f}% of surface area in the current orientation; supports may be needed"
+                if frac >= 0.02
+                else f"{frac * 100:.1f}% of surface area",
                 critical=False,
             )
         )
@@ -264,5 +308,7 @@ def validate_mesh(
             )
         )
     else:
-        checks.append(Check("wall_thickness", "Wall thickness", "not_checked", "requires a watertight mesh", False))
+        checks.append(
+            Check("wall_thickness", "Wall thickness", "not_checked", "requires a watertight mesh", False)
+        )
     return finish()

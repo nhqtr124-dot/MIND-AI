@@ -113,7 +113,9 @@ def check_budget(db: Session, org: Organization, user_id: uuid.UUID | None) -> N
     if org.monthly_budget_usd is not None:
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         spent = db.scalar(
-            select(func.coalesce(func.sum(UsageEvent.cost_usd), 0)).where(UsageEvent.org_id == org.id, UsageEvent.created_at >= month_start)
+            select(func.coalesce(func.sum(UsageEvent.cost_usd), 0)).where(
+                UsageEvent.org_id == org.id, UsageEvent.created_at >= month_start
+            )
         )
         if Decimal(spent) >= org.monthly_budget_usd:
             raise BudgetExceeded(f"Organization monthly budget of ${org.monthly_budget_usd} is used up")
@@ -125,4 +127,6 @@ def check_budget(db: Session, org: Organization, user_id: uuid.UUID | None) -> N
             )
         )
         if Decimal(spent) >= org.user_daily_budget_usd:
-            raise BudgetExceeded(f"Your daily budget of ${org.user_daily_budget_usd} in this organization is used up")
+            raise BudgetExceeded(
+                f"Your daily budget of ${org.user_daily_budget_usd} in this organization is used up"
+            )

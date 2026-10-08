@@ -59,7 +59,9 @@ def _expected_texts(spec: DocumentSpec) -> list[str]:
 
 
 def _word_coverage(spec: DocumentSpec, text: str) -> float:
-    words = [w for b in spec.blocks if isinstance(b, Paragraph) for w in re.findall(r"\w+", b.text.casefold())]
+    words = [
+        w for b in spec.blocks if isinstance(b, Paragraph) for w in re.findall(r"\w+", b.text.casefold())
+    ]
     if not words:
         return 1.0
     present = set(re.findall(r"\w+", text.casefold()))
@@ -68,7 +70,11 @@ def _word_coverage(spec: DocumentSpec, text: str) -> float:
 
 def validate_document(path: Path, fmt: str, spec: DocumentSpec) -> DocValidation:
     v = DocValidation(path.name, fmt)
-    v.add("exists", path.is_file() and path.stat().st_size > 0, f"{path.stat().st_size if path.exists() else 0} bytes")
+    v.add(
+        "exists",
+        path.is_file() and path.stat().st_size > 0,
+        f"{path.stat().st_size if path.exists() else 0} bytes",
+    )
     if not v.passed:
         return v
     try:
@@ -80,10 +86,16 @@ def validate_document(path: Path, fmt: str, spec: DocumentSpec) -> DocValidation
             for t in d.tables:
                 for row in t.rows:
                     text += "\n" + " ".join(c.text for c in row.cells)
-            headings = [p.text for p in d.paragraphs if p.style is not None and p.style.name.startswith("Heading")]
+            headings = [
+                p.text for p in d.paragraphs if p.style is not None and p.style.name.startswith("Heading")
+            ]
             v.metrics.update(paragraphs=len(d.paragraphs), tables=len(d.tables), headings=len(headings))
             want = [b.text for b in spec.blocks if isinstance(b, Heading)]
-            v.add("headings", all(w in headings for w in want), f"{len(want)} expected headings, found {len(headings)}")
+            v.add(
+                "headings",
+                all(w in headings for w in want),
+                f"{len(want)} expected headings, found {len(headings)}",
+            )
             want_tables = sum(isinstance(b, Table) for b in spec.blocks)
             v.add("tables", len(d.tables) == want_tables, f"{len(d.tables)} tables, expected {want_tables}")
             v.add("opens", True, "reopened with python-docx")
@@ -108,7 +120,13 @@ def validate_document(path: Path, fmt: str, spec: DocumentSpec) -> DocValidation
 
     hay = _norm(text)
     missing = [t for t in _expected_texts(spec) if _norm(t) not in hay]
-    v.add("content", not missing, "all titles, headings, list items and table headers present" if not missing else f"missing: {missing[:5]}")
+    v.add(
+        "content",
+        not missing,
+        "all titles, headings, list items and table headers present"
+        if not missing
+        else f"missing: {missing[:5]}",
+    )
     cov = _word_coverage(spec, unicodedata.normalize("NFKC", text))
     v.add("paragraph_text", cov >= 0.95, f"{cov:.0%} of paragraph words found")
     return v
@@ -126,7 +144,11 @@ def validate_pptx(path: Path, spec: PresentationSpec) -> DocValidation:
     slides = list(prs.slides)
     v.add("opens", True, "reopened with python-pptx")
     v.metrics["slides"] = len(slides)
-    v.add("slide_count", len(slides) == len(spec.slides) + 1, f"{len(slides)} slides (title + {len(spec.slides)})")
+    v.add(
+        "slide_count",
+        len(slides) == len(spec.slides) + 1,
+        f"{len(slides)} slides (title + {len(spec.slides)})",
+    )
     titles = [s.shapes.title.text if s.shapes.title is not None else "" for s in slides[1:]]
     v.add("titles", titles == [s.title for s in spec.slides], "slide titles match the outline")
     all_text = " ".join(sh.text_frame.text for s in slides for sh in s.shapes if sh.has_text_frame)
@@ -171,7 +193,11 @@ def validate_xlsx(path: Path, spec: WorkbookSpec) -> DocValidation:
             computed[ref] = val
             if isinstance(val, str) and val in _EXCEL_ERRORS:
                 errors.append(f"{ref} = {val}")
-        v.add("formulas_evaluate", not errors, f"{len(formulas)} formulas evaluated with pycel" if not errors else "; ".join(errors[:5]))
+        v.add(
+            "formulas_evaluate",
+            not errors,
+            f"{len(formulas)} formulas evaluated with pycel" if not errors else "; ".join(errors[:5]),
+        )
         mismatches = []
         for ref, want in spec.expected.items():
             got = computed.get(ref)
@@ -181,11 +207,23 @@ def validate_xlsx(path: Path, spec: WorkbookSpec) -> DocValidation:
                 except Exception as exc:  # noqa: BLE001
                     mismatches.append(f"{ref}: {exc}")
                     continue
-            ok = abs(float(got) - float(want)) < 1e-9 * max(1.0, abs(float(want))) if isinstance(want, (int, float)) and not isinstance(want, bool) and isinstance(got, (int, float)) else got == want
+            ok = (
+                abs(float(got) - float(want)) < 1e-9 * max(1.0, abs(float(want)))
+                if isinstance(want, (int, float))
+                and not isinstance(want, bool)
+                and isinstance(got, (int, float))
+                else got == want
+            )
             if not ok:
                 mismatches.append(f"{ref}: expected {want!r}, computed {got!r}")
         if spec.expected:
-            v.add("expected_values", not mismatches, f"{len(spec.expected)} expected values match" if not mismatches else "; ".join(mismatches[:5]))
+            v.add(
+                "expected_values",
+                not mismatches,
+                f"{len(spec.expected)} expected values match"
+                if not mismatches
+                else "; ".join(mismatches[:5]),
+            )
         v.metrics["computed"] = {k: computed[k] for k in list(computed)[:50]}
     return v
 

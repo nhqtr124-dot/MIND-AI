@@ -35,7 +35,9 @@ def _slug(title: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "-", title).strip("-")[:60] or "document"
 
 
-def build_document(kind: str, fmt: str, spec: dict[str, Any], out_dir: Path) -> tuple[Path, dict[str, Any], list[Path]]:
+def build_document(
+    kind: str, fmt: str, spec: dict[str, Any], out_dir: Path
+) -> tuple[Path, dict[str, Any], list[Path]]:
     """Render and validate; returns (file, validation report, extra preview files)."""
     previews: list[Path] = []
     if kind == "document":
@@ -96,8 +98,17 @@ def documents_generate(ctx: JobContext) -> dict[str, Any]:
             a = db.get(GeneratedArtifact, artifact_id)
             if a is None:
                 raise JobFailed("artifact record disappeared")
-            files = [(path, {"format": p["format"], "role": "document"})] + [(pv, {"format": "png", "role": "preview"}) for pv in previews]
-            store_version(db, a, files, validation=report, params={"kind": p["kind"], "format": p["format"]}, user_id=ctx.user_id)
+            files = [(path, {"format": p["format"], "role": "document"})] + [
+                (pv, {"format": "png", "role": "preview"}) for pv in previews
+            ]
+            store_version(
+                db,
+                a,
+                files,
+                validation=report,
+                params={"kind": p["kind"], "format": p["format"]},
+                user_id=ctx.user_id,
+            )
             a.validation_status = "passed" if report["passed"] else "failed"
             a.status = "completed" if report["passed"] else "failed"
     if not report["passed"]:

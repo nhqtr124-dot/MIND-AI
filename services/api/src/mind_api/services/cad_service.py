@@ -23,7 +23,13 @@ def cad_generate(ctx: JobContext) -> dict[str, Any]:
     settings = PrintSettings(**p.get("print_settings", {})) if p.get("print_settings") else None
     with tempfile.TemporaryDirectory(prefix="mind-cad-") as tmp:
         try:
-            res = generate_part(p["template"], p.get("params", {}), Path(tmp), formats=tuple(p.get("formats", ["stl", "step"])), settings=settings)
+            res = generate_part(
+                p["template"],
+                p.get("params", {}),
+                Path(tmp),
+                formats=tuple(p.get("formats", ["stl", "step"])),
+                settings=settings,
+            )
         except CadError as exc:
             with session_scope() as db:
                 a = db.get(GeneratedArtifact, artifact_id)
@@ -46,4 +52,9 @@ def cad_generate(ctx: JobContext) -> dict[str, Any]:
             # A part that failed validation is a completed generation whose output is NOT print-ready.
             a.status = "completed" if res.status != "validation_failed" else "partially_completed"
     ctx.progress(100, res.status)
-    return {"artifact_id": str(artifact_id), "status": res.status, "files": [f.format for f in res.files], "bom": res.bom}
+    return {
+        "artifact_id": str(artifact_id),
+        "status": res.status,
+        "files": [f.format for f in res.files],
+        "bom": res.bom,
+    }

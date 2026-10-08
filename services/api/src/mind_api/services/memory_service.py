@@ -21,21 +21,27 @@ from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from ..db import session_scope
+from ..deps import project_role
 from ..jobs import JobContext, JobFailed, RetryableJobError, handler
 from ..models import MemoryEmbedding, MemoryEntry, ModelConfig, Project, User
-from ..deps import project_role
 from .audit import record_usage
 from .providers import adapter_for, org_models
 
 
 def accessible_filter(db: Session, user: User, org_id: uuid.UUID) -> Any:
-    project_ids = [p.id for p in db.scalars(select(Project).where(Project.org_id == org_id, Project.archived_at.is_(None))) if project_role(db, user, p)]
+    project_ids = [
+        p.id
+        for p in db.scalars(select(Project).where(Project.org_id == org_id, Project.archived_at.is_(None)))
+        if project_role(db, user, p)
+    ]
     return and_(
         MemoryEntry.org_id == org_id,
         or_(
             and_(MemoryEntry.scope == "user", MemoryEntry.user_id == user.id),
             MemoryEntry.scope == "team",
-            and_(MemoryEntry.scope == "project", MemoryEntry.project_id.in_(project_ids or [uuid.UUID(int=0)])),
+            and_(
+                MemoryEntry.scope == "project", MemoryEntry.project_id.in_(project_ids or [uuid.UUID(int=0)])
+            ),
         ),
     )
 
@@ -56,41 +62,61 @@ def search(
     query_vector: list[float] | None = None,
     embedding_model_id: uuid.UUID | None = None,
 ) -> list[tuple[MemoryEntry, float, str]]:
+    """Hybrid retrieval: vector and full-text rankings fused with reciprocal rank fusion (k=60)."""
     base = accessible_filter(db, user, org_id)
     if project_id is not None:
         base = and_(base, or_(MemoryEntry.scope != "project", MemoryEntry.project_id == project_id))
-    results: list[tuple[MemoryEntry, float, str]] = []
-    seen: set[uuid.UUID] = set()
+    pool = max(k * 3, 10)
+    rankings: dict[str, list[MemoryEntry]] = {}
     if query_vector is not None and embedding_model_id is not None:
         dist = MemoryEmbedding.embedding.cosine_distance(query_vector)
         q: Select[Any] = (
-            select(MemoryEntry, dist.label("d"))
+            select(MemoryEntry)
             .join(MemoryEmbedding, MemoryEmbedding.memory_id == MemoryEntry.id)
-            .where(base, MemoryEmbedding.model_config_id == embedding_model_id, MemoryEmbedding.dim == len(query_vector))
+            .where(
+                base,
+                MemoryEmbedding.model_config_id == embedding_model_id,
+                MemoryEmbedding.dim == len(query_vector),
+            )
             .order_by(dist)
-            .limit(k)
+            .limit(pool)
         )
-        for entry, d in db.execute(q):
-            results.append((entry, round(1 - float(d), 4), "vector"))
-            seen.add(entry.id)
-    if len(results) < k and query.strip():
+        rankings["vector"] = list(db.scalars(q))
+    if query.strip():
         tsq = func.plainto_tsquery("simple", query)
-        rank = func.ts_rank(func.to_tsvector("simple", MemoryEntry.content), tsq)
-        q = select(MemoryEntry, rank.label("r")).where(base, func.to_tsvector("simple", MemoryEntry.content).op("@@")(tsq)).order_by(rank.desc()).limit(k)
-        for entry, r in db.execute(q):
-            if entry.id not in seen:
-                results.append((entry, round(float(r), 4), "fulltext"))
-                seen.add(entry.id)
-        if not results:
-            # Short or stop-word-only queries: fall back to substring matching.
-            words = [w for w in query.split() if len(w) > 2][:5]
+        tsv = func.to_tsvector("simple", MemoryEntry.content)
+        q = (
+            select(MemoryEntry)
+            .where(base, tsv.op("@@")(tsq))
+            .order_by(func.ts_rank(tsv, tsq).desc())
+            .limit(pool)
+        )
+        rankings["fulltext"] = list(db.scalars(q))
+        if not rankings["fulltext"]:
+            # plainto_tsquery ANDs terms; fall back to matching any significant word.
+            words = [w for w in query.split() if len(w) > 2][:6]
             if words:
-                q = select(MemoryEntry).where(base, or_(*[MemoryEntry.content.ilike(f"%{w}%") for w in words])).limit(k)
-                results += [(e, 0.0, "substring") for e in db.scalars(q)]
-    return results[:k]
+                q = (
+                    select(MemoryEntry)
+                    .where(base, or_(*[MemoryEntry.content.ilike(f"%{w}%") for w in words]))
+                    .limit(pool)
+                )
+                rankings["substring"] = list(db.scalars(q))
+    scores: dict[uuid.UUID, float] = {}
+    methods: dict[uuid.UUID, list[str]] = {}
+    entries: dict[uuid.UUID, MemoryEntry] = {}
+    for method, ranked in rankings.items():
+        for rank, e in enumerate(ranked):
+            scores[e.id] = scores.get(e.id, 0.0) + 1.0 / (60 + rank + 1)
+            methods.setdefault(e.id, []).append(method)
+            entries[e.id] = e
+    ordered = sorted(scores, key=lambda i: (-scores[i], str(i)))
+    return [(entries[i], round(scores[i], 5), "+".join(methods[i])) for i in ordered[:k]]
 
 
-async def embed_query(db_factory: Any, org_id: uuid.UUID, text: str) -> tuple[list[float] | None, uuid.UUID | None]:
+async def embed_query(
+    db_factory: Any, org_id: uuid.UUID, text: str
+) -> tuple[list[float] | None, uuid.UUID | None]:
     """Embed a query if the org has an embedding model; failures degrade to full-text search."""
 
     def _model() -> tuple[Any, uuid.UUID | None, str | None]:
@@ -141,7 +167,11 @@ def memory_embed(ctx: JobContext) -> dict[str, Any]:
     with session_scope() as db:
         if db.get(MemoryEntry, mid) is None:
             return {"skipped": "memory deleted during embedding"}
-        existing = db.scalar(select(MemoryEmbedding).where(MemoryEmbedding.memory_id == mid, MemoryEmbedding.model_config_id == model_id))
+        existing = db.scalar(
+            select(MemoryEmbedding).where(
+                MemoryEmbedding.memory_id == mid, MemoryEmbedding.model_config_id == model_id
+            )
+        )
         if existing:
             existing.embedding, existing.dim = vec, len(vec)
         else:

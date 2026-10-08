@@ -40,7 +40,15 @@ def create_artifact(
     source: dict[str, Any] | None = None,
     status: str = "running",
 ) -> GeneratedArtifact:
-    a = GeneratedArtifact(org_id=org_id, project_id=project_id, created_by=user_id, kind=kind, title=title[:200], status=status, source=source or {})
+    a = GeneratedArtifact(
+        org_id=org_id,
+        project_id=project_id,
+        created_by=user_id,
+        kind=kind,
+        title=title[:200],
+        status=status,
+        source=source or {},
+    )
     db.add(a)
     db.flush()
     return a
@@ -78,7 +86,14 @@ def store_version(
                 **meta,
             }
         )
-    v = ArtifactVersion(artifact_id=artifact.id, version=version, files=files, validation=validation, params=params, created_by=user_id)
+    v = ArtifactVersion(
+        artifact_id=artifact.id,
+        version=version,
+        files=files,
+        validation=validation,
+        params=params,
+        created_by=user_id,
+    )
     db.add(v)
     artifact.current_version = version
     db.flush()

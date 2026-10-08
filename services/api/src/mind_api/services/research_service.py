@@ -33,7 +33,11 @@ SYNTH_SYSTEM = """You are the MIND Research Agent. Write a concise, well-structu
 
 def _engine(org_id: uuid.UUID, name: str | None) -> Any:
     with session_scope() as db:
-        q = select(IntegrationCredential).where(IntegrationCredential.org_id == org_id, IntegrationCredential.enabled.is_(True), IntegrationCredential.kind.in_(list(ENGINES)))
+        q = select(IntegrationCredential).where(
+            IntegrationCredential.org_id == org_id,
+            IntegrationCredential.enabled.is_(True),
+            IntegrationCredential.kind.in_(list(ENGINES)),
+        )
         if name:
             q = q.where(IntegrationCredential.name == name)
         cred = db.scalars(q).first()
@@ -56,7 +60,9 @@ def research_run(ctx: JobContext) -> dict[str, Any]:
         if not urls:
             engine = _engine(ctx.org_id, p.get("engine"))
             if engine is None:
-                raise JobFailed("No web search provider is configured. Add Brave, Tavily or SearXNG in Settings → Integrations, or provide URLs.")
+                raise JobFailed(
+                    "No web search provider is configured. Add Brave, Tavily or SearXNG in Settings → Integrations, or provide URLs."
+                )
             try:
                 found = await engine.search(question, count=max_sources * 2)
             except ResearchError as exc:
@@ -93,7 +99,16 @@ def research_run(ctx: JobContext) -> dict[str, Any]:
 
     ctx.progress(50, "extracting evidence")
     passages = rank_passages(question, [pg["text"] for pg in pages], top_k=12)
-    sources = [{"n": i + 1, "url": pg["final_url"], "title": pg["title"], "retrieved_at": pg["retrieved_at"], "sha256": pg["sha256"]} for i, pg in enumerate(pages)]
+    sources = [
+        {
+            "n": i + 1,
+            "url": pg["final_url"],
+            "title": pg["title"],
+            "retrieved_at": pg["retrieved_at"],
+            "sha256": pg["sha256"],
+        }
+        for i, pg in enumerate(pages)
+    ]
     evidence = [{"source": ps.source_index + 1, "score": ps.score, "text": ps.text} for ps in passages]
     stages.append({"stage": "evidence", "passages": len(evidence)})
 
@@ -104,9 +119,21 @@ def research_run(ctx: JobContext) -> dict[str, Any]:
         ev_text = "\n\n".join(f"[{e['source']}] {e['text']}" for e in evidence)
         src_text = "\n".join(f"[{s['n']}] {s['title']} — {s['url']}" for s in sources)
         try:
-            r = llm.complete_sync(ctx.org_id, ctx.user_id, SYNTH_SYSTEM, f"Question: {question}\n\nSources:\n{src_text}\n\nEvidence passages:\n{ev_text}", max_output_tokens=3000, purpose="research")
+            r = llm.complete_sync(
+                ctx.org_id,
+                ctx.user_id,
+                SYNTH_SYSTEM,
+                f"Question: {question}\n\nSources:\n{src_text}\n\nEvidence passages:\n{ev_text}",
+                max_output_tokens=3000,
+                purpose="research",
+            )
             check = verify_citations(r.text, [pg["text"] for pg in pages])
-            synthesis = {"generated": True, "model": r.model, "provider": r.provider, "citations": check.to_dict()}
+            synthesis = {
+                "generated": True,
+                "model": r.model,
+                "provider": r.provider,
+                "citations": check.to_dict(),
+            }
             report_md = r.text
         except llm.LLMUnavailable as exc:
             synthesis = {"generated": False, "reason": str(exc)}
@@ -116,29 +143,84 @@ def research_run(ctx: JobContext) -> dict[str, Any]:
         lines += ["## Findings (model-generated, cited)", "", report_md, ""]
         cit = synthesis["citations"]
         if not cit["ok"]:
-            lines += ["> **Citation check failed:** " + ("; ".join(filter(None, [f"invalid source numbers {cit['invalid']}" if cit["invalid"] else "", f"{len(cit['unverified_quotes'])} quotation(s) not found in the cited sources" if cit["unverified_quotes"] else ""]))), ""]
+            lines += [
+                "> **Citation check failed:** "
+                + (
+                    "; ".join(
+                        filter(
+                            None,
+                            [
+                                f"invalid source numbers {cit['invalid']}" if cit["invalid"] else "",
+                                f"{len(cit['unverified_quotes'])} quotation(s) not found in the cited sources"
+                                if cit["unverified_quotes"]
+                                else "",
+                            ],
+                        )
+                    )
+                ),
+                "",
+            ]
     else:
-        lines += ["> No conclusions were generated" + (f": {synthesis.get('reason')}" if synthesis.get("reason") else "") + ". The evidence below is quoted verbatim from the sources.", ""]
+        lines += [
+            "> No conclusions were generated"
+            + (f": {synthesis.get('reason')}" if synthesis.get("reason") else "")
+            + ". The evidence below is quoted verbatim from the sources.",
+            "",
+        ]
     lines += ["## Evidence (verbatim extracts)", ""]
     for e in evidence:
         lines += [f"**[{e['source']}]** " + e["text"].replace("\n", " ")[:1200], ""]
-    lines += ["## Sources", ""] + [f"{s['n']}. [{s['title']}]({s['url']}) — retrieved {s['retrieved_at']}" for s in sources]
+    lines += ["## Sources", ""] + [
+        f"{s['n']}. [{s['title']}]({s['url']}) — retrieved {s['retrieved_at']}" for s in sources
+    ]
 
     with tempfile.TemporaryDirectory(prefix="mind-research-") as tmp:
         md = Path(tmp) / "report.md"
         md.write_text("\n".join(lines) + "\n", encoding="utf-8")
         js = Path(tmp) / "sources.json"
-        js.write_text(json.dumps({"question": question, "sources": sources, "evidence": evidence, "search_hits": hits, "stages": stages, "synthesis": synthesis}, indent=2), encoding="utf-8")
+        js.write_text(
+            json.dumps(
+                {
+                    "question": question,
+                    "sources": sources,
+                    "evidence": evidence,
+                    "search_hits": hits,
+                    "stages": stages,
+                    "synthesis": synthesis,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
         with session_scope() as db:
             a = db.get(GeneratedArtifact, artifact_id)
             assert a is not None
             validation = {"sources": len(sources), "passages": len(evidence), "synthesis": synthesis}
-            store_version(db, a, [(md, {"format": "md"}), (js, {"format": "json"})], validation=validation, params={"question": question}, user_id=ctx.user_id)
+            store_version(
+                db,
+                a,
+                [(md, {"format": "md"}), (js, {"format": "json"})],
+                validation=validation,
+                params={"question": question},
+                user_id=ctx.user_id,
+            )
             cit_ok = synthesis.get("citations", {}).get("ok", True)
-            a.validation_status = "citations_verified" if synthesis["generated"] and cit_ok else "citations_failed" if synthesis["generated"] else "evidence_only"
+            a.validation_status = (
+                "citations_verified"
+                if synthesis["generated"] and cit_ok
+                else "citations_failed"
+                if synthesis["generated"]
+                else "evidence_only"
+            )
             a.status = "completed" if synthesis["generated"] and cit_ok else "partially_completed"
             status = a.status
-    return {"artifact_id": str(artifact_id), "sources": len(sources), "synthesis": synthesis, "stages": stages, "_status": status}
+    return {
+        "artifact_id": str(artifact_id),
+        "sources": len(sources),
+        "synthesis": synthesis,
+        "stages": stages,
+        "_status": status,
+    }
 
 
 def _fail(artifact_id: uuid.UUID) -> None:

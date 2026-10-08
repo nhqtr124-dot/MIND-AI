@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_DEV_SECRET = "dev-insecure-secret-change-me-0123456789abcdef"
+_DEV_SECRET = "dev-insecure-secret-change-me-0123456789abcdef"  # noqa: S105 - rejected when MIND_ENV=prod
 
 
 class Settings(BaseSettings):
@@ -18,7 +18,9 @@ class Settings(BaseSettings):
     redis_url: str | None = "redis://localhost:6379/0"
 
     secret_key: str = _DEV_SECRET
-    encryption_key: str | None = Field(None, description="Fernet key for provider credentials; derived from secret_key in dev")
+    encryption_key: str | None = Field(
+        None, description="Fernet key for provider credentials; derived from secret_key in dev"
+    )
     access_token_minutes: int = 30
     refresh_token_days: int = 30
     allow_registration: bool = True
@@ -51,7 +53,9 @@ class Settings(BaseSettings):
     def _prod_guard(self) -> Settings:
         if self.env == "prod":
             if self.secret_key == _DEV_SECRET or len(self.secret_key) < 32:
-                raise ValueError("MIND_SECRET_KEY must be set to a random value of at least 32 characters in production")
+                raise ValueError(
+                    "MIND_SECRET_KEY must be set to a random value of at least 32 characters in production"
+                )
             if not self.encryption_key:
                 raise ValueError("MIND_ENCRYPTION_KEY must be set in production")
             if not self.cookie_secure:

@@ -11,7 +11,16 @@ from sqlalchemy import select
 from ..deps import DB, CurrentUser, client_ip, rate_limit, require_project
 from ..jobs import enqueue
 from ..models import GeneratedArtifact
-from ..schemas import AiEditIn, BuilderInitIn, FileRenameIn, FileWriteIn, JobCreated, PreviewOut, WorkspaceFileContent, WorkspaceFileOut
+from ..schemas import (
+    AiEditIn,
+    BuilderInitIn,
+    FileRenameIn,
+    FileWriteIn,
+    JobCreated,
+    PreviewOut,
+    WorkspaceFileContent,
+    WorkspaceFileOut,
+)
 from ..services import builder as b
 from ..services.artifacts import artifact_dict
 from ..services.audit import audit
@@ -59,10 +68,22 @@ def read_file(project_id: uuid.UUID, path: str, user: CurrentUser, db: DB) -> Wo
         content, binary = data.decode("utf-8"), False
     except UnicodeDecodeError:
         content, binary = None, True
-    return WorkspaceFileContent(path=row.path, size_bytes=row.size_bytes, sha256=row.sha256, mime_type=row.mime_type, updated_at=row.updated_at, content=content, binary=binary)
+    return WorkspaceFileContent(
+        path=row.path,
+        size_bytes=row.size_bytes,
+        sha256=row.sha256,
+        mime_type=row.mime_type,
+        updated_at=row.updated_at,
+        content=content,
+        binary=binary,
+    )
 
 
-@router.put("/projects/{project_id}/file", response_model=WorkspaceFileOut, dependencies=[rate_limit("builder-write", 300)])
+@router.put(
+    "/projects/{project_id}/file",
+    response_model=WorkspaceFileOut,
+    dependencies=[rate_limit("builder-write", 300)],
+)
 def write_file(project_id: uuid.UUID, body: FileWriteIn, user: CurrentUser, db: DB) -> WorkspaceFileOut:
     p, _ = require_project(db, user, project_id, "editor")
     try:
@@ -107,25 +128,53 @@ def run_tests(project_id: uuid.UUID, user: CurrentUser, db: DB) -> JobCreated:
     return JobCreated(job_id=job.id)
 
 
-@router.post("/projects/{project_id}/ai-edit", response_model=JobCreated, status_code=202, dependencies=[rate_limit("ai-edit", 20)])
+@router.post(
+    "/projects/{project_id}/ai-edit",
+    response_model=JobCreated,
+    status_code=202,
+    dependencies=[rate_limit("ai-edit", 20)],
+)
 def ai_edit(project_id: uuid.UUID, body: AiEditIn, request: Request, user: CurrentUser, db: DB) -> JobCreated:
     p, _ = require_project(db, user, project_id, "editor")
     if not p.builder_template:
         raise HTTPException(status.HTTP_409_CONFLICT, "Initialise the project from a Builder template first")
-    job = enqueue(db, "builder.ai_edit", org_id=p.org_id, user_id=user.id, project_id=p.id, payload={"prompt": body.prompt}, max_attempts=1)
-    audit(db, "builder.ai_edit", user_id=user.id, org_id=p.org_id, target_type="project", target_id=p.id, ip=client_ip(request))
+    job = enqueue(
+        db,
+        "builder.ai_edit",
+        org_id=p.org_id,
+        user_id=user.id,
+        project_id=p.id,
+        payload={"prompt": body.prompt},
+        max_attempts=1,
+    )
+    audit(
+        db,
+        "builder.ai_edit",
+        user_id=user.id,
+        org_id=p.org_id,
+        target_type="project",
+        target_id=p.id,
+        ip=client_ip(request),
+    )
     return JobCreated(job_id=job.id)
 
 
 @router.get("/projects/{project_id}/snapshots")
 def snapshots(project_id: uuid.UUID, user: CurrentUser, db: DB) -> list[dict[str, Any]]:
     p, _ = require_project(db, user, project_id)
-    rows = db.scalars(select(GeneratedArtifact).where(GeneratedArtifact.project_id == p.id, GeneratedArtifact.kind == "code").order_by(GeneratedArtifact.created_at.desc()).limit(50))
+    rows = db.scalars(
+        select(GeneratedArtifact)
+        .where(GeneratedArtifact.project_id == p.id, GeneratedArtifact.kind == "code")
+        .order_by(GeneratedArtifact.created_at.desc())
+        .limit(50)
+    )
     return [artifact_dict(a, include_versions=False) for a in rows]
 
 
 @router.post("/projects/{project_id}/snapshots", status_code=201)
-def create_snapshot(project_id: uuid.UUID, user: CurrentUser, db: DB, label: str = "manual snapshot") -> dict[str, str]:
+def create_snapshot(
+    project_id: uuid.UUID, user: CurrentUser, db: DB, label: str = "manual snapshot"
+) -> dict[str, str]:
     p, _ = require_project(db, user, project_id, "editor")
     return {"artifact_id": str(b.snapshot(db, p, user.id, label[:80]))}
 
@@ -146,7 +195,11 @@ def export(project_id: uuid.UUID, user: CurrentUser, db: DB) -> Response:
     p, _ = require_project(db, user, project_id)
     name = re.sub(r"[^A-Za-z0-9]+", "-", p.name).strip("-") or "project"
     data = b.export_zip(b.read_files(db, p.id), root=name)
-    return Response(data, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{name}.zip"'})
+    return Response(
+        data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{name}.zip"'},
+    )
 
 
 @router.post("/projects/{project_id}/preview", response_model=PreviewOut)
@@ -156,14 +209,20 @@ def preview(project_id: uuid.UUID, user: CurrentUser, db: DB) -> PreviewOut:
         pv, reused = start_preview(db, p, user.id)
     except PreviewError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    return PreviewOut(id=pv.id, url=preview_url(pv.id), status=pv.status, reused=reused, started_at=pv.started_at)
+    return PreviewOut(
+        id=pv.id, url=preview_url(pv.id), status=pv.status, reused=reused, started_at=pv.started_at
+    )
 
 
 @router.get("/projects/{project_id}/preview", response_model=PreviewOut | None)
 def preview_status(project_id: uuid.UUID, user: CurrentUser, db: DB) -> PreviewOut | None:
     p, _ = require_project(db, user, project_id)
     pv = active_preview(db, p.id)
-    return PreviewOut(id=pv.id, url=preview_url(pv.id), status=pv.status, reused=True, started_at=pv.started_at) if pv else None
+    return (
+        PreviewOut(id=pv.id, url=preview_url(pv.id), status=pv.status, reused=True, started_at=pv.started_at)
+        if pv
+        else None
+    )
 
 
 @router.delete("/projects/{project_id}/preview", status_code=204)

@@ -20,7 +20,19 @@ from .db import session_scope, utcnow
 from .models import Preview
 from .security import verify_payload
 
-HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade", "host", "content-length", "content-encoding"}
+HOP = {
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailers",
+    "transfer-encoding",
+    "upgrade",
+    "host",
+    "content-length",
+    "content-encoding",
+}
 
 app = FastAPI(title="MIND preview proxy", docs_url=None, redoc_url=None, openapi_url=None)
 _client = httpx.AsyncClient(timeout=httpx.Timeout(30.0), follow_redirects=False)
@@ -52,7 +64,9 @@ async def proxy(token: str, path: str, request: Request) -> Response:
     url = f"{upstream}/{path}"
     headers = {k: v for k, v in request.headers.items() if k.lower() not in HOP and k.lower() != "cookie"}
     try:
-        r = await _client.request(request.method, url, params=request.query_params, content=await request.body(), headers=headers)
+        r = await _client.request(
+            request.method, url, params=request.query_params, content=await request.body(), headers=headers
+        )
     except httpx.HTTPError as exc:
         return PlainTextResponse(f"Preview app is not responding: {type(exc).__name__}", status_code=502)
     out = {k: v for k, v in r.headers.items() if k.lower() not in HOP and k.lower() != "set-cookie"}

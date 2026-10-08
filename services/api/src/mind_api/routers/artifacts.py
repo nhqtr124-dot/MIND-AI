@@ -20,7 +20,9 @@ from .files import safe_file_response
 router = APIRouter(tags=["artifacts"])
 
 
-def get_artifact(db: DB, user: CurrentUser, artifact_id: uuid.UUID, min_role: str = "viewer") -> GeneratedArtifact:
+def get_artifact(
+    db: DB, user: CurrentUser, artifact_id: uuid.UUID, min_role: str = "viewer"
+) -> GeneratedArtifact:
     a = db.get(GeneratedArtifact, artifact_id)
     if a is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Artifact not found")
@@ -43,7 +45,12 @@ def _file(a: GeneratedArtifact, name: str, version: int | None) -> dict[str, Any
 
 @router.get("/artifacts", response_model=list[ArtifactOut])
 def list_artifacts(
-    user: CurrentUser, db: DB, org_id: uuid.UUID | None = None, project_id: uuid.UUID | None = None, kind: str | None = None, limit: int = 50
+    user: CurrentUser,
+    db: DB,
+    org_id: uuid.UUID | None = None,
+    project_id: uuid.UUID | None = None,
+    kind: str | None = None,
+    limit: int = 50,
 ) -> list[dict[str, Any]]:
     scope = resolve_scope(db, user, org_id, project_id)
     q = select(GeneratedArtifact).where(GeneratedArtifact.org_id == scope.org_id)
@@ -54,11 +61,21 @@ def list_artifacts(
         from ..deps import project_role
         from ..models import Project
 
-        visible = [p.id for p in db.scalars(select(Project).where(Project.org_id == scope.org_id)) if project_role(db, user, p)]
-        q = q.where((GeneratedArtifact.project_id.is_(None)) | (GeneratedArtifact.project_id.in_(visible or [uuid.UUID(int=0)])))
+        visible = [
+            p.id
+            for p in db.scalars(select(Project).where(Project.org_id == scope.org_id))
+            if project_role(db, user, p)
+        ]
+        q = q.where(
+            (GeneratedArtifact.project_id.is_(None))
+            | (GeneratedArtifact.project_id.in_(visible or [uuid.UUID(int=0)]))
+        )
     if kind:
         q = q.where(GeneratedArtifact.kind == kind)
-    return [artifact_dict(a) for a in db.scalars(q.order_by(GeneratedArtifact.created_at.desc()).limit(min(limit, 200)))]
+    return [
+        artifact_dict(a)
+        for a in db.scalars(q.order_by(GeneratedArtifact.created_at.desc()).limit(min(limit, 200)))
+    ]
 
 
 @router.get("/artifacts/{artifact_id}", response_model=ArtifactOut)
@@ -67,7 +84,14 @@ def read_artifact(artifact_id: uuid.UUID, user: CurrentUser, db: DB) -> dict[str
 
 
 @router.get("/artifacts/{artifact_id}/files/{name}")
-def download_artifact_file(artifact_id: uuid.UUID, name: str, user: CurrentUser, db: DB, version: int | None = None, inline: bool = False) -> Response:
+def download_artifact_file(
+    artifact_id: uuid.UUID,
+    name: str,
+    user: CurrentUser,
+    db: DB,
+    version: int | None = None,
+    inline: bool = False,
+) -> Response:
     a = get_artifact(db, user, artifact_id)
     f = _file(a, name, version)
     try:
@@ -78,7 +102,14 @@ def download_artifact_file(artifact_id: uuid.UUID, name: str, user: CurrentUser,
 
 
 @router.post("/artifacts/{artifact_id}/files/{name}/signed-url", response_model=SignedUrlOut)
-def signed_url(artifact_id: uuid.UUID, name: str, user: CurrentUser, db: DB, version: int | None = None, ttl_s: int = 3600) -> SignedUrlOut:
+def signed_url(
+    artifact_id: uuid.UUID,
+    name: str,
+    user: CurrentUser,
+    db: DB,
+    version: int | None = None,
+    ttl_s: int = 3600,
+) -> SignedUrlOut:
     a = get_artifact(db, user, artifact_id)
     f = _file(a, name, version)
     ttl = max(60, min(ttl_s, 7 * 86400))
@@ -107,7 +138,15 @@ def move_artifact(artifact_id: uuid.UUID, body: ArtifactMove, user: CurrentUser,
         if p.org_id != a.org_id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
     a.project_id = body.project_id
-    audit(db, "artifact.move", user_id=user.id, org_id=a.org_id, target_type="artifact", target_id=a.id, project_id=str(body.project_id))
+    audit(
+        db,
+        "artifact.move",
+        user_id=user.id,
+        org_id=a.org_id,
+        target_type="artifact",
+        target_id=a.id,
+        project_id=str(body.project_id),
+    )
     return artifact_dict(a)
 
 
@@ -119,4 +158,13 @@ def delete_artifact(artifact_id: uuid.UUID, request: Request, user: CurrentUser,
         for f in v.files:
             storage.delete(f["storage_key"])
     db.delete(a)
-    audit(db, "artifact.delete", user_id=user.id, org_id=a.org_id, target_type="artifact", target_id=artifact_id, ip=client_ip(request), title=a.title)
+    audit(
+        db,
+        "artifact.delete",
+        user_id=user.id,
+        org_id=a.org_id,
+        target_type="artifact",
+        target_id=artifact_id,
+        ip=client_ip(request),
+        title=a.title,
+    )

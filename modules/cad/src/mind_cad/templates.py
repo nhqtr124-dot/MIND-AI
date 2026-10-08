@@ -111,7 +111,12 @@ class ArduinoUnoHolder(CadTemplate):
 
         height = p.base_thickness + p.standoff_height
         if p.rim_height > 0:
-            outer = cq.Workplane("XY").workplane(offset=p.base_thickness).rect(length, width).extrude(p.rim_height)
+            outer = (
+                cq.Workplane("XY")
+                .workplane(offset=p.base_thickness)
+                .rect(length, width)
+                .extrude(p.rim_height)
+            )
             inner = (
                 cq.Workplane("XY")
                 .workplane(offset=p.base_thickness)
@@ -139,7 +144,12 @@ class ArduinoUnoHolder(CadTemplate):
                 (-length / 2 + inset, width / 2 - inset),
                 (length / 2 - inset, width / 2 - inset),
             ]
-            body = body.faces("<Z").workplane().pushPoints([(x, -y) for x, y in mpts]).hole(p.mounting_hole_diameter)
+            body = (
+                body.faces("<Z")
+                .workplane()
+                .pushPoints([(x, -y) for x, y in mpts])
+                .hole(p.mounting_hole_diameter)
+            )
 
         assumptions = [
             "Hole pattern from the Arduino UNO R3 mechanical drawing (board 68.6 x 53.3 mm).",
@@ -152,7 +162,11 @@ class ArduinoUnoHolder(CadTemplate):
             parts=[PartSolid("arduino_uno_holder", body, (length, width, height))],
             hardware=[
                 HardwareItem("M3 x 6 mm self-tapping screw", 4, "board to standoffs"),
-                *([HardwareItem("M3 screw (length to suit mounting surface)", 4, "holder to surface")] if p.mounting_holes else []),
+                *(
+                    [HardwareItem("M3 screw (length to suit mounting surface)", 4, "holder to surface")]
+                    if p.mounting_holes
+                    else []
+                ),
             ],
             assumptions=assumptions,
         )
@@ -173,7 +187,9 @@ class VentedEnclosureParams(BaseModel):
     vent_slots: int = Field(6, ge=0, le=40, description="Slots per long side")
     vent_width: float = Field(2.0, ge=1.0, le=10)
     vent_height_ratio: float = Field(0.5, gt=0, le=0.8)
-    cable_hole_diameter: float = Field(0.0, ge=0, le=30, description="0 disables the cable hole on a short side")
+    cable_hole_diameter: float = Field(
+        0.0, ge=0, le=30, description="0 disables the cable hole on a short side"
+    )
 
     @model_validator(mode="after")
     def _check(self) -> VentedEnclosureParams:
@@ -205,8 +221,10 @@ def _vented_enclosure(p: VentedEnclosureParams) -> tuple[PartSolid, PartSolid]:
         xs = [-p.inner_length / 2 + pitch * (i + 1) for i in range(p.vent_slots)]
         for side in (1, -1):
             for x in xs:
-                slot = cq.Workplane("XY").box(p.vent_width, p.wall * 3, slot_h).translate(
-                    (x, side * (p.inner_width / 2 + p.wall / 2), z_center)
+                slot = (
+                    cq.Workplane("XY")
+                    .box(p.vent_width, p.wall * 3, slot_h)
+                    .translate((x, side * (p.inner_width / 2 + p.wall / 2), z_center))
                 )
                 body = body.cut(slot)
 
@@ -331,7 +349,13 @@ class LBracket(CadTemplate):
             gw = max(p.thickness, 2.0)
             gusset = (
                 cq.Workplane("XZ")
-                .polyline([(p.thickness, p.thickness), (p.thickness + g, p.thickness), (p.thickness, p.thickness + g)])
+                .polyline(
+                    [
+                        (p.thickness, p.thickness),
+                        (p.thickness + g, p.thickness),
+                        (p.thickness, p.thickness + g),
+                    ]
+                )
                 .close()
                 .extrude(gw / 2, both=True)
             )
@@ -391,7 +415,11 @@ class Standoff(CadTemplate):
     def build(self, params: BaseModel) -> TemplateResult:
         p = StandoffParams.model_validate(params.model_dump())
         wp = cq.Workplane("XY")
-        body = wp.polygon(6, p.outer_diameter).extrude(p.height) if p.hexagonal else wp.circle(p.outer_diameter / 2).extrude(p.height)
+        body = (
+            wp.polygon(6, p.outer_diameter).extrude(p.height)
+            if p.hexagonal
+            else wp.circle(p.outer_diameter / 2).extrude(p.height)
+        )
         if p.hole_diameter > 0:
             body = body.faces(">Z").workplane().hole(p.hole_diameter)
         bb = body.val().BoundingBox()
@@ -405,6 +433,11 @@ TEMPLATES: dict[str, CadTemplate] = {
 
 def template_catalog() -> list[dict[str, Any]]:
     return [
-        {"key": t.key, "title": t.title, "description": t.description, "params_schema": t.Params.model_json_schema()}
+        {
+            "key": t.key,
+            "title": t.title,
+            "description": t.description,
+            "params_schema": t.Params.model_json_schema(),
+        }
         for t in TEMPLATES.values()
     ]

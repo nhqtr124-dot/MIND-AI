@@ -12,7 +12,20 @@ from ..errors import ProviderError
 from ..types import ChatRequest, DiscoveredModel, EmbeddingResult, ImageResult, StreamEvent, Usage
 from .base import ProviderAdapter
 
-_NON_CHAT_MARKERS = ("embedding", "tts", "whisper", "dall-e", "moderation", "transcribe", "realtime", "audio", "image", "search", "davinci", "babbage")
+_NON_CHAT_MARKERS = (
+    "embedding",
+    "tts",
+    "whisper",
+    "dall-e",
+    "moderation",
+    "transcribe",
+    "realtime",
+    "audio",
+    "image",
+    "search",
+    "davinci",
+    "babbage",
+)
 
 
 def _messages(req: ChatRequest) -> list[dict[str, Any]]:
@@ -22,7 +35,10 @@ def _messages(req: ChatRequest) -> list[dict[str, Any]]:
     for m in req.messages:
         if m.images:
             parts: list[dict[str, Any]] = [{"type": "text", "text": m.text}]
-            parts += [{"type": "image_url", "image_url": {"url": f"data:{i.mime_type};base64,{i.data_b64}"}} for i in m.images]
+            parts += [
+                {"type": "image_url", "image_url": {"url": f"data:{i.mime_type};base64,{i.data_b64}"}}
+                for i in m.images
+            ]
             out.append({"role": m.role, "content": parts})
         else:
             out.append({"role": m.role, "content": m.text})
@@ -59,7 +75,11 @@ class OpenAIAdapter(ProviderAdapter):
             elif not any(k in low for k in _NON_CHAT_MARKERS):
                 caps.add("chat")
             if caps:
-                out.append(DiscoveredModel(name=mid, display_name=mid, capabilities=caps, capabilities_source="heuristic"))
+                out.append(
+                    DiscoveredModel(
+                        name=mid, display_name=mid, capabilities=caps, capabilities_source="heuristic"
+                    )
+                )
         return sorted(out, key=lambda d: d.name)
 
     async def stream_chat(self, req: ChatRequest) -> AsyncIterator[StreamEvent]:  # type: ignore[override]
@@ -83,7 +103,11 @@ class OpenAIAdapter(ProviderAdapter):
                 continue
             if "error" in chunk:
                 err = chunk["error"]
-                raise ProviderError("unknown", f"{self.kind} stream error: {err.get('message', err) if isinstance(err, dict) else err}", provider=self.kind)
+                raise ProviderError(
+                    "unknown",
+                    f"{self.kind} stream error: {err.get('message', err) if isinstance(err, dict) else err}",
+                    provider=self.kind,
+                )
             for choice in chunk.get("choices") or []:
                 delta = (choice.get("delta") or {}).get("content")
                 if delta:
@@ -98,14 +122,20 @@ class OpenAIAdapter(ProviderAdapter):
         yield StreamEvent("done", finish_reason=finish)
 
     async def embed(self, model: str, texts: list[str]) -> EmbeddingResult:
-        data = await self._request_json("POST", f"{self.base_url}/embeddings", json={"model": model, "input": texts})
+        data = await self._request_json(
+            "POST", f"{self.base_url}/embeddings", json={"model": model, "input": texts}
+        )
         rows = sorted(data.get("data", []), key=lambda r: r.get("index", 0))
         u = data.get("usage") or {}
         return EmbeddingResult([r["embedding"] for r in rows], Usage(int(u.get("prompt_tokens") or 0), 0))
 
-    async def generate_image(self, model: str, prompt: str, size: str = "1024x1024", n: int = 1) -> ImageResult:
+    async def generate_image(
+        self, model: str, prompt: str, size: str = "1024x1024", n: int = 1
+    ) -> ImageResult:
         data = await self._request_json(
-            "POST", f"{self.base_url}/images/generations", json={"model": model, "prompt": prompt, "size": size, "n": n}
+            "POST",
+            f"{self.base_url}/images/generations",
+            json={"model": model, "prompt": prompt, "size": size, "n": n},
         )
         images: list[bytes] = []
         revised = None
@@ -116,7 +146,11 @@ class OpenAIAdapter(ProviderAdapter):
             elif item.get("url"):
                 resp = await self.client.get(item["url"])
                 if resp.status_code >= 400:
-                    raise ProviderError("unavailable", f"could not download generated image (HTTP {resp.status_code})", provider=self.kind)
+                    raise ProviderError(
+                        "unavailable",
+                        f"could not download generated image (HTTP {resp.status_code})",
+                        provider=self.kind,
+                    )
                 images.append(resp.content)
         if not images:
             raise ProviderError("unknown", "provider returned no image data", provider=self.kind)

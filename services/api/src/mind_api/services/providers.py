@@ -21,7 +21,11 @@ HTTP_CLIENT_FACTORY: Callable[[], httpx.AsyncClient] | None = None
 PROVIDER_KINDS: dict[str, dict[str, Any]] = {
     "openai": {"label": "OpenAI", "needs_key": True, "default_base_url": "https://api.openai.com/v1"},
     "anthropic": {"label": "Anthropic", "needs_key": True, "default_base_url": "https://api.anthropic.com"},
-    "gemini": {"label": "Google Gemini", "needs_key": True, "default_base_url": "https://generativelanguage.googleapis.com/v1beta"},
+    "gemini": {
+        "label": "Google Gemini",
+        "needs_key": True,
+        "default_base_url": "https://generativelanguage.googleapis.com/v1beta",
+    },
     "openai_compatible": {
         "label": "OpenAI-compatible (Ollama, vLLM, LM Studio, OpenRouter, ...)",
         "needs_key": False,
@@ -32,7 +36,9 @@ PROVIDER_KINDS: dict[str, dict[str, Any]] = {
 
 def adapter_for(provider: ModelProvider) -> ProviderAdapter:
     client = HTTP_CLIENT_FACTORY() if HTTP_CLIENT_FACTORY else None
-    return make_adapter(provider.kind, decrypt_secret(provider.api_key_encrypted), provider.base_url, client=client)
+    return make_adapter(
+        provider.kind, decrypt_secret(provider.api_key_encrypted), provider.base_url, client=client
+    )
 
 
 async def discover(provider: ModelProvider) -> list[dict[str, Any]]:
@@ -57,7 +63,9 @@ async def discover(provider: ModelProvider) -> list[dict[str, Any]]:
 
 def apply_discovery(db: Session, provider: ModelProvider, found: list[dict[str, Any]]) -> tuple[int, int]:
     """Upsert discovered models. New models start disabled so cost is opt-in."""
-    existing = {m.model_name: m for m in db.scalars(select(ModelConfig).where(ModelConfig.provider_id == provider.id))}
+    existing = {
+        m.model_name: m for m in db.scalars(select(ModelConfig).where(ModelConfig.provider_id == provider.id))
+    }
     added = 0
     for m in found:
         cfg = existing.get(m["name"])
@@ -105,7 +113,9 @@ def candidate(m: ModelConfig) -> ModelCandidate:
     )
 
 
-def org_models(db: Session, org_id: uuid.UUID, capability: str | None = None, enabled_only: bool = True) -> list[ModelConfig]:
+def org_models(
+    db: Session, org_id: uuid.UUID, capability: str | None = None, enabled_only: bool = True
+) -> list[ModelConfig]:
     q = select(ModelConfig).where(ModelConfig.org_id == org_id)
     if enabled_only:
         q = q.where(ModelConfig.enabled.is_(True))

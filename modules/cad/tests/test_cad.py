@@ -3,7 +3,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 import trimesh
-
 from mind_cad import TEMPLATES, CadError, generate_part, template_catalog, validate_mesh
 from mind_cad.templates import UNO_HOLES
 
@@ -27,7 +26,9 @@ def test_every_template_exports_valid_stl_and_step(key: str, tmp_path: Path) -> 
 
 
 def test_arduino_holder_matches_board_hole_pattern(tmp_path: Path) -> None:
-    res = generate_part("arduino_uno_holder", {"margin": 5, "rim_height": 0, "mounting_holes": False}, tmp_path)
+    res = generate_part(
+        "arduino_uno_holder", {"margin": 5, "rim_height": 0, "mounting_holes": False}, tmp_path
+    )
     stl = next(f.path for f in res.files if f.format == "stl")
     mesh = trimesh.load(stl, force="mesh")
     # The four screw holes must be empty space at the standoff centres just below the top.

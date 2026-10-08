@@ -51,7 +51,9 @@ def image_generate(ctx: JobContext) -> dict[str, Any]:
     async def go() -> Any:
         a = adapter_for(provider)
         try:
-            return await a.generate_image(model_name, p["prompt"], size=p.get("size", "1024x1024"), n=int(p.get("n", 1)))
+            return await a.generate_image(
+                model_name, p["prompt"], size=p.get("size", "1024x1024"), n=int(p.get("n", 1))
+            )
         finally:
             await a.aclose()
 
@@ -80,10 +82,28 @@ def image_generate(ctx: JobContext) -> dict[str, Any]:
         with session_scope() as db:
             a = db.get(GeneratedArtifact, artifact_id)
             assert a is not None
-            store_version(db, a, files, validation={"images": infos, "decoded": True, "revised_prompt": res.revised_prompt}, params={k: p[k] for k in ("prompt", "size", "n") if k in p}, user_id=ctx.user_id)
+            store_version(
+                db,
+                a,
+                files,
+                validation={"images": infos, "decoded": True, "revised_prompt": res.revised_prompt},
+                params={k: p[k] for k in ("prompt", "size", "n") if k in p},
+                user_id=ctx.user_id,
+            )
             a.status, a.validation_status = "completed", "decoded"
             cost = price * len(res.images) if price is not None else None
-            record_usage(db, org_id=ctx.org_id, user_id=ctx.user_id, category="image", provider_kind=provider.kind, model_name=model_name, units=Decimal(len(res.images)), cost_usd=cost, ref_type="artifact", ref_id=artifact_id)
+            record_usage(
+                db,
+                org_id=ctx.org_id,
+                user_id=ctx.user_id,
+                category="image",
+                provider_kind=provider.kind,
+                model_name=model_name,
+                units=Decimal(len(res.images)),
+                cost_usd=cost,
+                ref_type="artifact",
+                ref_id=artifact_id,
+            )
     return {"artifact_id": str(artifact_id), "images": infos}
 
 
@@ -144,7 +164,11 @@ def edit_image_bytes(data: bytes, req: EditRequest) -> tuple[bytes, dict[str, An
     if req.output_format == "jpeg" and im.mode not in ("RGB", "L"):
         im = im.convert("RGB")
     buf = io.BytesIO()
-    im.save(buf, format=req.output_format.upper(), **({"quality": req.quality} if req.output_format in ("jpeg", "webp") else {}))
+    im.save(
+        buf,
+        format=req.output_format.upper(),
+        **({"quality": req.quality} if req.output_format in ("jpeg", "webp") else {}),
+    )
     out = buf.getvalue()
     return out, inspect_image(out)
 

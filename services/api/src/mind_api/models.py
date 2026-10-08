@@ -31,7 +31,15 @@ from .db import Base, utcnow
 ROLES = ("owner", "admin", "editor", "viewer")
 ROLE_RANK = {"viewer": 1, "editor": 2, "admin": 3, "owner": 4}
 # Completion states shared by jobs, agent runs/tasks and artifacts.
-STATES = ("planned", "running", "awaiting_approval", "completed", "failed", "cancelled", "partially_completed")
+STATES = (
+    "planned",
+    "running",
+    "awaiting_approval",
+    "completed",
+    "failed",
+    "cancelled",
+    "partially_completed",
+)
 
 
 def _uuid() -> Mapped[uuid.UUID]:
@@ -39,7 +47,9 @@ def _uuid() -> Mapped[uuid.UUID]:
 
 
 def _fk(target: str, nullable: bool = False, ondelete: str = "CASCADE", index: bool = True) -> Mapped[Any]:
-    return mapped_column(UUID(as_uuid=True), ForeignKey(target, ondelete=ondelete), nullable=nullable, index=index)
+    return mapped_column(
+        UUID(as_uuid=True), ForeignKey(target, ondelete=ondelete), nullable=nullable, index=index
+    )
 
 
 def _created() -> Mapped[datetime]:
@@ -143,11 +153,17 @@ class ProjectMember(Base):
     """Explicit sharing for private projects (org admins/owners always have access)."""
 
     __tablename__ = "project_members"
-    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
     role: Mapped[str] = mapped_column(String(10), nullable=False)
     created_at: Mapped[datetime] = _created()
-    __table_args__ = (CheckConstraint("role IN ('owner', 'editor', 'viewer')", name="ck_project_member_role"),)
+    __table_args__ = (
+        CheckConstraint("role IN ('owner', 'editor', 'viewer')", name="ck_project_member_role"),
+    )
 
 
 class ProjectFile(Base):
@@ -170,7 +186,13 @@ class ProjectFile(Base):
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow, nullable=False)
     __table_args__ = (
         CheckConstraint("kind IN ('upload', 'workspace')", name="ck_file_kind"),
-        Index("uq_workspace_path", "project_id", "path", unique=True, postgresql_where=text("kind = 'workspace'")),
+        Index(
+            "uq_workspace_path",
+            "project_id",
+            "path",
+            unique=True,
+            postgresql_where=text("kind = 'workspace'"),
+        ),
     )
 
 
@@ -265,7 +287,9 @@ class Message(Base):
     created_at: Mapped[datetime] = _created()
     __table_args__ = (
         CheckConstraint("role IN ('user', 'assistant', 'system')", name="ck_message_role"),
-        CheckConstraint("status IN ('streaming', 'completed', 'failed', 'cancelled')", name="ck_message_status"),
+        CheckConstraint(
+            "status IN ('streaming', 'completed', 'failed', 'cancelled')", name="ck_message_status"
+        ),
         Index("ix_messages_fts", text("to_tsvector('simple', content)"), postgresql_using="gin"),
     )
 
@@ -292,8 +316,13 @@ class AgentRun(Base):
     created_at: Mapped[datetime] = _created()
     started_at: Mapped[datetime | None]
     finished_at: Mapped[datetime | None]
-    tasks: Mapped[list[AgentTask]] = relationship(back_populates="run", order_by="AgentTask.position", cascade="all, delete-orphan")
-    __table_args__ = (_states_check("status", "ck_run_status"), CheckConstraint("plan_source IN ('llm', 'user')", name="ck_run_plan_source"))
+    tasks: Mapped[list[AgentTask]] = relationship(
+        back_populates="run", order_by="AgentTask.position", cascade="all, delete-orphan"
+    )
+    __table_args__ = (
+        _states_check("status", "ck_run_status"),
+        CheckConstraint("plan_source IN ('llm', 'user')", name="ck_run_plan_source"),
+    )
 
 
 class AgentTask(Base):
@@ -317,7 +346,10 @@ class AgentTask(Base):
     started_at: Mapped[datetime | None]
     finished_at: Mapped[datetime | None]
     run: Mapped[AgentRun] = relationship(back_populates="tasks")
-    __table_args__ = (UniqueConstraint("run_id", "key", name="uq_task_key"), _states_check("status", "ck_task_status"))
+    __table_args__ = (
+        UniqueConstraint("run_id", "key", name="uq_task_key"),
+        _states_check("status", "ck_task_status"),
+    )
 
 
 class ToolExecution(Base):
@@ -334,7 +366,9 @@ class ToolExecution(Base):
     error: Mapped[str | None] = mapped_column(Text)
     duration_ms: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = _created()
-    __table_args__ = (CheckConstraint("status IN ('succeeded', 'failed', 'denied')", name="ck_tool_exec_status"),)
+    __table_args__ = (
+        CheckConstraint("status IN ('succeeded', 'failed', 'denied')", name="ck_tool_exec_status"),
+    )
 
 
 class Approval(Base):
@@ -354,7 +388,9 @@ class Approval(Base):
     decision_note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _created()
     __table_args__ = (
-        CheckConstraint("status IN ('pending', 'approved', 'rejected', 'expired')", name="ck_approval_status"),
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected', 'expired')", name="ck_approval_status"
+        ),
         CheckConstraint("risk IN ('medium', 'high', 'critical')", name="ck_approval_risk"),
     )
 
@@ -376,7 +412,9 @@ class GeneratedArtifact(Base):
     current_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow, nullable=False)
-    versions: Mapped[list[ArtifactVersion]] = relationship(back_populates="artifact", order_by="ArtifactVersion.version", cascade="all, delete-orphan")
+    versions: Mapped[list[ArtifactVersion]] = relationship(
+        back_populates="artifact", order_by="ArtifactVersion.version", cascade="all, delete-orphan"
+    )
     __table_args__ = (
         _states_check("status", "ck_artifact_status"),
         CheckConstraint(

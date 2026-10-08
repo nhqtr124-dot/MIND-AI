@@ -44,7 +44,12 @@ def dummy_verify() -> None:
 def create_access_token(user_id: uuid.UUID) -> str:
     s = get_settings()
     now = datetime.now(UTC)
-    payload = {"sub": str(user_id), "iat": now, "exp": now + timedelta(minutes=s.access_token_minutes), "typ": "access"}
+    payload = {
+        "sub": str(user_id),
+        "iat": now,
+        "exp": now + timedelta(minutes=s.access_token_minutes),
+        "typ": "access",
+    }
     return jwt.encode(payload, s.secret_key, algorithm=ALGO)
 
 

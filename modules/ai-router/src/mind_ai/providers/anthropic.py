@@ -19,7 +19,8 @@ def _messages(req: ChatRequest) -> list[dict[str, Any]]:
         if m.role == "system":
             continue
         content: list[dict[str, Any]] = [
-            {"type": "image", "source": {"type": "base64", "media_type": i.mime_type, "data": i.data_b64}} for i in m.images
+            {"type": "image", "source": {"type": "base64", "media_type": i.mime_type, "data": i.data_b64}}
+            for i in m.images
         ]
         content.append({"type": "text", "text": m.text or " "})
         out.append({"role": m.role, "content": content})
@@ -31,7 +32,11 @@ class AnthropicAdapter(ProviderAdapter):
     default_base_url = "https://api.anthropic.com"
 
     def headers(self) -> dict[str, str]:
-        return {"x-api-key": self.api_key, "anthropic-version": API_VERSION, "content-type": "application/json"}
+        return {
+            "x-api-key": self.api_key,
+            "anthropic-version": API_VERSION,
+            "content-type": "application/json",
+        }
 
     async def list_models(self) -> list[DiscoveredModel]:
         out: list[DiscoveredModel] = []
@@ -40,7 +45,12 @@ class AnthropicAdapter(ProviderAdapter):
             params = {"limit": "100", **({"after_id": after} if after else {})}
             data = await self._request_json("GET", f"{self.base_url}/v1/models", params=params)
             for m in data.get("data", []):
-                caps = {"chat", "vision", "tools", "code"}  # every current Claude model accepts images and tools
+                caps = {
+                    "chat",
+                    "vision",
+                    "tools",
+                    "code",
+                }  # every current Claude model accepts images and tools
                 out.append(
                     DiscoveredModel(
                         name=m["id"],
@@ -57,8 +67,15 @@ class AnthropicAdapter(ProviderAdapter):
         return out
 
     async def stream_chat(self, req: ChatRequest) -> AsyncIterator[StreamEvent]:  # type: ignore[override]
-        system = "\n\n".join(filter(None, [req.system, *[m.text for m in req.messages if m.role == "system"]]))
-        body: dict[str, Any] = {"model": req.model, "max_tokens": req.max_output_tokens, "messages": _messages(req), "stream": True}
+        system = "\n\n".join(
+            filter(None, [req.system, *[m.text for m in req.messages if m.role == "system"]])
+        )
+        body: dict[str, Any] = {
+            "model": req.model,
+            "max_tokens": req.max_output_tokens,
+            "messages": _messages(req),
+            "stream": True,
+        }
         if system:
             body["system"] = system
         if req.temperature is not None:
@@ -73,8 +90,10 @@ class AnthropicAdapter(ProviderAdapter):
             etype = payload.get("type", event)
             if etype == "message_start":
                 u = (payload.get("message") or {}).get("usage") or {}
-                usage.input_tokens = int(u.get("input_tokens") or 0) + int(u.get("cache_read_input_tokens") or 0) + int(
-                    u.get("cache_creation_input_tokens") or 0
+                usage.input_tokens = (
+                    int(u.get("input_tokens") or 0)
+                    + int(u.get("cache_read_input_tokens") or 0)
+                    + int(u.get("cache_creation_input_tokens") or 0)
                 )
                 usage.output_tokens = int(u.get("output_tokens") or 0)
             elif etype == "content_block_delta":
@@ -88,8 +107,16 @@ class AnthropicAdapter(ProviderAdapter):
                 finish = (payload.get("delta") or {}).get("stop_reason") or finish
             elif etype == "error":
                 err = payload.get("error") or {}
-                kind = "rate_limit" if err.get("type") == "rate_limit_error" else "unavailable" if err.get("type") == "overloaded_error" else "unknown"
-                raise ProviderError(kind, f"anthropic stream error: {err.get('message', 'unknown')}", provider=self.kind)  # type: ignore[arg-type]
+                kind = (
+                    "rate_limit"
+                    if err.get("type") == "rate_limit_error"
+                    else "unavailable"
+                    if err.get("type") == "overloaded_error"
+                    else "unknown"
+                )
+                raise ProviderError(
+                    kind, f"anthropic stream error: {err.get('message', 'unknown')}", provider=self.kind
+                )  # type: ignore[arg-type]
             elif etype == "message_stop":
                 break
         yield StreamEvent("usage", usage=usage)

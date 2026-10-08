@@ -1,22 +1,60 @@
 from decimal import Decimal
 
 import pytest
-
-from mind_ai import ChatMessage, ImagePart, ModelCandidate, NoEligibleModel, Pricing, Usage, classify, compute_cost, select_model
+from mind_ai import (
+    ChatMessage,
+    ImagePart,
+    ModelCandidate,
+    NoEligibleModel,
+    Pricing,
+    Usage,
+    classify,
+    compute_cost,
+    select_model,
+)
 
 
 def cands() -> list[ModelCandidate]:
     return [
-        ModelCandidate("fast", "openai", "small", {"chat"}, 16000, quality_tier=2, speed_tier=5, input_price_per_mtok=Decimal("0.1"), output_price_per_mtok=Decimal("0.4")),
-        ModelCandidate("smart", "anthropic", "large", {"chat", "vision", "code"}, 200000, quality_tier=5, speed_tier=2, input_price_per_mtok=Decimal("3"), output_price_per_mtok=Decimal("15")),
-        ModelCandidate("off", "gemini", "disabled", {"chat", "vision"}, 1000000, quality_tier=5, enabled=False),
+        ModelCandidate(
+            "fast",
+            "openai",
+            "small",
+            {"chat"},
+            16000,
+            quality_tier=2,
+            speed_tier=5,
+            input_price_per_mtok=Decimal("0.1"),
+            output_price_per_mtok=Decimal("0.4"),
+        ),
+        ModelCandidate(
+            "smart",
+            "anthropic",
+            "large",
+            {"chat", "vision", "code"},
+            200000,
+            quality_tier=5,
+            speed_tier=2,
+            input_price_per_mtok=Decimal("3"),
+            output_price_per_mtok=Decimal("15"),
+        ),
+        ModelCandidate(
+            "off", "gemini", "disabled", {"chat", "vision"}, 1000000, quality_tier=5, enabled=False
+        ),
     ]
 
 
 def test_classify() -> None:
     assert classify([ChatMessage("user", "hi")]).task_type == "simple"
-    assert classify([ChatMessage("user", "Fix this python traceback in my function please")]).task_type == "code"
-    assert classify([ChatMessage("user", "Compare the trade-offs of these three database designs for our team")]).task_type == "reasoning"
+    assert (
+        classify([ChatMessage("user", "Fix this python traceback in my function please")]).task_type == "code"
+    )
+    assert (
+        classify(
+            [ChatMessage("user", "Compare the trade-offs of these three database designs for our team")]
+        ).task_type
+        == "reasoning"
+    )
     assert classify([ChatMessage("user", "x", images=[ImagePart("", "image/png")])]).needs_vision
 
 

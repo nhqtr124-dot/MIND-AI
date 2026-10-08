@@ -1,11 +1,10 @@
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import create_engine
-
 from mind_api import models  # noqa: F401 - registers tables
 from mind_api.config import get_settings
 from mind_api.db import Base
+from sqlalchemy import create_engine
 
 config = context.config
 if config.config_file_name is not None:
@@ -14,7 +13,12 @@ target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
-    context.configure(url=get_settings().database_url, target_metadata=target_metadata, literal_binds=True, compare_type=True)
+    context.configure(
+        url=get_settings().database_url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        compare_type=True,
+    )
     with context.begin_transaction():
         context.run_migrations()
 

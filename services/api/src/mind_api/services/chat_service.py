@@ -108,14 +108,27 @@ def _attachment_parts(db: Session, org_id: uuid.UUID, file_ids: list[str]) -> tu
         f = db.get(ProjectFile, uuid.UUID(fid))
         if f is None or f.org_id != org_id:
             continue
-        if f.mime_type.startswith("image/") and f.mime_type in ("image/png", "image/jpeg", "image/webp", "image/gif"):
-            images.append(ImagePart(base64.b64encode(get_storage().get_bytes(f.storage_key)).decode(), f.mime_type))
+        if f.mime_type.startswith("image/") and f.mime_type in (
+            "image/png",
+            "image/jpeg",
+            "image/webp",
+            "image/gif",
+        ):
+            images.append(
+                ImagePart(base64.b64encode(get_storage().get_bytes(f.storage_key)).decode(), f.mime_type)
+            )
         elif f.extracted_text:
             body = f.extracted_text[:MAX_DOC_CHARS]
-            note = "" if len(f.extracted_text) <= MAX_DOC_CHARS else f"\n[truncated: showing {MAX_DOC_CHARS} of {len(f.extracted_text)} characters]"
+            note = (
+                ""
+                if len(f.extracted_text) <= MAX_DOC_CHARS
+                else f"\n[truncated: showing {MAX_DOC_CHARS} of {len(f.extracted_text)} characters]"
+            )
             texts.append(f'<document name="{f.path}">\n{body}{note}\n</document>')
         else:
-            texts.append(f'<document name="{f.path}">[no text could be extracted: {f.extraction_error or "unsupported type"}]</document>')
+            texts.append(
+                f'<document name="{f.path}">[no text could be extracted: {f.extraction_error or "unsupported type"}]</document>'
+            )
     return "\n\n".join(texts), images
 
 
@@ -128,7 +141,12 @@ def prepare_turn(db: Session, t: TurnInput) -> Prepared:
 
     if t.regenerate_of is not None:
         target = db.get(Message, t.regenerate_of)
-        if target is None or target.conversation_id != conv.id or target.role != "assistant" or target.parent_id is None:
+        if (
+            target is None
+            or target.conversation_id != conv.id
+            or target.role != "assistant"
+            or target.parent_id is None
+        ):
             raise ValueError("can only regenerate an assistant reply")
         user_msg = db.get(Message, target.parent_id)
         assert user_msg is not None
@@ -144,13 +162,21 @@ def prepare_turn(db: Session, t: TurnInput) -> Prepared:
             parent = db.get(Message, parent_id)
             if parent is None or parent.conversation_id != conv.id:
                 raise ValueError("parent message not in this conversation")
-        user_msg = Message(conversation_id=conv.id, parent_id=parent_id, role="user", content=t.content, attachments=[str(a) for a in t.attachments])
+        user_msg = Message(
+            conversation_id=conv.id,
+            parent_id=parent_id,
+            role="user",
+            content=t.content,
+            attachments=[str(a) for a in t.attachments],
+        )
         db.add(user_msg)
         db.flush()
         if conv.title == "New chat" and t.content.strip():
             conv.title = t.content.strip().splitlines()[0][:80]
 
-    assistant = Message(conversation_id=conv.id, parent_id=user_msg.id, role="assistant", content="", status="streaming")
+    assistant = Message(
+        conversation_id=conv.id, parent_id=user_msg.id, role="assistant", content="", status="streaming"
+    )
     db.add(assistant)
     db.flush()
     conv.current_leaf_id = assistant.id
@@ -168,7 +194,9 @@ def prepare_turn(db: Session, t: TurnInput) -> Prepared:
                 text = f"{docs}\n\n{text}"
         history.append(ChatMessage(m.role, text, images))  # type: ignore[arg-type]
 
-    system = SYSTEM_PROMPT + (f"\n\nConversation instructions from the user:\n{conv.system_prompt}" if conv.system_prompt else "")
+    system = SYSTEM_PROMPT + (
+        f"\n\nConversation instructions from the user:\n{conv.system_prompt}" if conv.system_prompt else ""
+    )
     return Prepared(
         org_id=conv.org_id,
         user_message_id=user_msg.id,
@@ -178,14 +206,17 @@ def prepare_turn(db: Session, t: TurnInput) -> Prepared:
         history=history,
         system=system,
         query_text=user_msg.content,
-        explicit_model_id=t.model_config_id or (conv.model_config_id if conv.model_mode == "manual" else None),
+        explicit_model_id=t.model_config_id
+        or (conv.model_config_id if conv.model_mode == "manual" else None),
         fallback_policy=org.fallback_policy,
         project_id=conv.project_id,
         use_memory=conv.use_memory,
     )
 
 
-def _trim_history(history: list[ChatMessage], system: str, context_window: int | None, max_out: int) -> list[ChatMessage]:
+def _trim_history(
+    history: list[ChatMessage], system: str, context_window: int | None, max_out: int
+) -> list[ChatMessage]:
     """Drop the oldest turns until the estimate fits the model's context window."""
     budget = (context_window or DEFAULT_CONTEXT) - max_out - estimate_tokens(system) - 256
     kept: list[ChatMessage] = []
@@ -207,7 +238,9 @@ def _finish(message_id: uuid.UUID, **values: Any) -> None:
                 setattr(m, k, v)
 
 
-async def run_turn(t: TurnInput, cancelled: Callable[[], bool] | None = None) -> AsyncIterator[dict[str, Any]]:
+async def run_turn(
+    t: TurnInput, cancelled: Callable[[], bool] | None = None
+) -> AsyncIterator[dict[str, Any]]:
     def _prep() -> Prepared:
         with session_scope() as db:
             org_id = db.scalar(select(Conversation.org_id).where(Conversation.id == t.conversation_id))
@@ -224,7 +257,11 @@ async def run_turn(t: TurnInput, cancelled: Callable[[], bool] | None = None) ->
     except (ValueError, LookupError) as exc:
         yield {"type": "error", "error": {"kind": "invalid_request", "message": str(exc)}}
         return
-    yield {"type": "start", "user_message_id": str(prep.user_message_id), "assistant_message_id": str(prep.assistant_message_id)}
+    yield {
+        "type": "start",
+        "user_message_id": str(prep.user_message_id),
+        "assistant_message_id": str(prep.assistant_message_id),
+    }
 
     # Memory retrieval (consent-based: only explicitly stored entries; conversation can opt out).
     memory_block = ""
@@ -235,12 +272,23 @@ async def run_turn(t: TurnInput, cancelled: Callable[[], bool] | None = None) ->
             with session_scope() as db:
                 user = db.get(User, t.user_id)
                 assert user is not None
-                hits = memory_service.search(db, user, prep.org_id, prep.query_text, project_id=prep.project_id, k=5, query_vector=vec, embedding_model_id=mid)
+                hits = memory_service.search(
+                    db,
+                    user,
+                    prep.org_id,
+                    prep.query_text,
+                    project_id=prep.project_id,
+                    k=5,
+                    query_vector=vec,
+                    embedding_model_id=mid,
+                )
                 return [f"- ({e.scope}) {e.content}" for e, _, _ in hits]
 
         lines = await asyncio.to_thread(_mem)
         if lines:
-            memory_block = "\n\n<memory>\nSaved memories that may be relevant:\n" + "\n".join(lines) + "\n</memory>"
+            memory_block = (
+                "\n\n<memory>\nSaved memories that may be relevant:\n" + "\n".join(lines) + "\n</memory>"
+            )
     system = prep.system + memory_block
 
     # Resolve the model order to try.
@@ -259,19 +307,32 @@ async def run_turn(t: TurnInput, cancelled: Callable[[], bool] | None = None) ->
                 if prep.fallback_policy == "auto":
                     try:
                         d = select_model(profile, [candidate(m) for m in enabled if m.id != chosen.id])
-                        order += [(by_id[uuid.UUID(cid)], f"Fallback (org policy 'auto') after {chosen.model_name} failed.") for cid, _ in d.ranked]
+                        order += [
+                            (
+                                by_id[uuid.UUID(cid)],
+                                f"Fallback (org policy 'auto') after {chosen.model_name} failed.",
+                            )
+                            for cid, _ in d.ranked
+                        ]
                     except NoEligibleModel:
                         pass
                 return order, {"mode": "manual", "fallback_policy": prep.fallback_policy}
             d = select_model(profile, [candidate(m) for m in enabled])
             order = [(by_id[uuid.UUID(d.model.id)], d.reason)]
-            order += [(by_id[uuid.UUID(cid)], f"Next-ranked model after a provider failure. {d.reason}") for cid, _ in d.ranked[1:]]
+            order += [
+                (by_id[uuid.UUID(cid)], f"Next-ranked model after a provider failure. {d.reason}")
+                for cid, _ in d.ranked[1:]
+            ]
             return order, {"mode": "auto", "task_type": profile.task_type, "rejected": d.rejected}
 
     try:
         order, routing_meta = await asyncio.to_thread(_plan)
     except NoEligibleModel as exc:
-        err = {"kind": "no_model", "message": str(exc) + ". Configure and enable a chat model in Settings → AI providers.", "rejected": exc.rejected}
+        err = {
+            "kind": "no_model",
+            "message": str(exc) + ". Configure and enable a chat model in Settings → AI providers.",
+            "rejected": exc.rejected,
+        }
         await asyncio.to_thread(_finish, prep.assistant_message_id, status="failed", error=err)
         yield {"type": "error", "error": err}
         return
@@ -291,7 +352,12 @@ async def run_turn(t: TurnInput, cancelled: Callable[[], bool] | None = None) ->
             "fallback": idx > 0,
         }
         history = _trim_history(prep.history, system, model.context_window, t.max_output_tokens)
-        req = ChatRequest(model=model.model_name, messages=history, system=system, max_output_tokens=min(t.max_output_tokens, model.max_output_tokens or t.max_output_tokens))
+        req = ChatRequest(
+            model=model.model_name,
+            messages=history,
+            system=system,
+            max_output_tokens=min(t.max_output_tokens, model.max_output_tokens or t.max_output_tokens),
+        )
         adapter = adapter_for(model.provider)
         usage: Usage | None = None
         finish: str | None = None
@@ -312,13 +378,27 @@ async def run_turn(t: TurnInput, cancelled: Callable[[], bool] | None = None) ->
             can_move_on = not text_parts and idx + 1 < min(len(order), 3)
             if can_move_on and (routing_meta["mode"] == "auto" or prep.fallback_policy == "auto"):
                 continue
-            err = {"kind": exc.kind, "message": exc.message, "provider": model.provider.kind, "model": model.model_name, "attempts": attempts}
+            err = {
+                "kind": exc.kind,
+                "message": exc.message,
+                "provider": model.provider.kind,
+                "model": model.model_name,
+                "attempts": attempts,
+            }
             options: list[dict[str, str]] = []
             if routing_meta["mode"] == "manual" and prep.fallback_policy == "ask" and not text_parts:
 
                 def _alts(failed: uuid.UUID = model.id) -> list[dict[str, str]]:
                     with session_scope() as db:
-                        return [{"model_config_id": str(m.id), "display_name": m.display_name, "provider": m.provider.kind} for m in org_models(db, prep.org_id, "chat") if m.id != failed]
+                        return [
+                            {
+                                "model_config_id": str(m.id),
+                                "display_name": m.display_name,
+                                "provider": m.provider.kind,
+                            }
+                            for m in org_models(db, prep.org_id, "chat")
+                            if m.id != failed
+                        ]
 
                 options = await asyncio.to_thread(_alts)
             await asyncio.to_thread(
@@ -340,11 +420,20 @@ async def run_turn(t: TurnInput, cancelled: Callable[[], bool] | None = None) ->
         usage_estimated = usage.total == 0
         if usage_estimated:
             # Some OpenAI-compatible servers omit usage; record a labelled estimate rather than zero.
-            usage = Usage(estimate_tokens(system + "".join(m.text for m in history)), estimate_tokens("".join(text_parts)))
+            usage = Usage(
+                estimate_tokens(system + "".join(m.text for m in history)),
+                estimate_tokens("".join(text_parts)),
+            )
         cost = compute_cost(usage, Pricing(model.input_price_per_mtok, model.output_price_per_mtok))
         routing["usage_estimated"] = usage_estimated
 
-        def _save(m: ModelConfig = model, u: Usage = usage, c: Decimal | None = cost, r: dict[str, Any] = routing, f: str | None = finish) -> None:
+        def _save(
+            m: ModelConfig = model,
+            u: Usage = usage,
+            c: Decimal | None = cost,
+            r: dict[str, Any] = routing,
+            f: str | None = finish,
+        ) -> None:
             with session_scope() as db:
                 msg = db.get(Message, prep.assistant_message_id)
                 assert msg is not None
@@ -361,7 +450,11 @@ async def run_turn(t: TurnInput, cancelled: Callable[[], bool] | None = None) ->
         yield {
             "type": "done",
             "assistant_message_id": str(prep.assistant_message_id),
-            "usage": {"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens, "estimated": usage_estimated},
+            "usage": {
+                "input_tokens": usage.input_tokens,
+                "output_tokens": usage.output_tokens,
+                "estimated": usage_estimated,
+            },
             "cost_usd": str(cost) if cost is not None else None,
             "finish_reason": finish,
         }

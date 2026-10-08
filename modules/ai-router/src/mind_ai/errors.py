@@ -2,7 +2,18 @@ from __future__ import annotations
 
 from typing import Literal
 
-ErrorKind = Literal["auth", "permission", "rate_limit", "invalid_request", "not_found", "unavailable", "timeout", "network", "unsupported", "unknown"]
+ErrorKind = Literal[
+    "auth",
+    "permission",
+    "rate_limit",
+    "invalid_request",
+    "not_found",
+    "unavailable",
+    "timeout",
+    "network",
+    "unsupported",
+    "unknown",
+]
 
 
 class ProviderError(Exception):
@@ -20,7 +31,13 @@ class ProviderError(Exception):
         return self.kind in ("rate_limit", "unavailable", "timeout", "network")
 
     def to_dict(self) -> dict[str, object]:
-        return {"kind": self.kind, "message": self.message, "status": self.status, "provider": self.provider, "retryable": self.retryable}
+        return {
+            "kind": self.kind,
+            "message": self.message,
+            "status": self.status,
+            "provider": self.provider,
+            "retryable": self.retryable,
+        }
 
 
 def kind_for_status(status: int) -> ErrorKind:

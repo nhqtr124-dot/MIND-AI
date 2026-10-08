@@ -58,16 +58,29 @@ class NoEligibleModel(Exception):
         self.rejected = rejected
 
 
-_CODE = re.compile(r"```|\b(def|class|function|const|import|traceback|stack trace|compile|bug|refactor|typescript|python|sql|regex|api)\b", re.I)
-_REASON = re.compile(r"\b(prove|derive|step by step|analy[sz]e|compare|trade-?offs?|why|calculate|solve|plan|strategy|evaluate)\b", re.I)
+_CODE = re.compile(
+    r"```|\b(def|class|function|const|import|traceback|stack trace|compile|bug|refactor|typescript|python|sql|regex|api)\b",
+    re.I,
+)
+_REASON = re.compile(
+    r"\b(prove|derive|step by step|analy[sz]e|compare|trade-?offs?|why|calculate|solve|plan|strategy|evaluate)\b",
+    re.I,
+)
 _CREATIVE = re.compile(r"\b(story|poem|slogan|creative|brainstorm|lyrics|fiction|tagline)\b", re.I)
 _TRANSLATE = re.compile(r"\b(translate|translation|ترجم)\b", re.I)
 
 
-def classify(messages: list[ChatMessage], system: str | None = None, max_output_tokens: int = 2048, preference: Preference = "balanced") -> TaskProfile:
+def classify(
+    messages: list[ChatMessage],
+    system: str | None = None,
+    max_output_tokens: int = 2048,
+    preference: Preference = "balanced",
+) -> TaskProfile:
     last = next((m for m in reversed(messages) if m.role == "user"), None)
     text = last.text if last else ""
-    total = estimate_tokens((system or "") + "".join(m.text for m in messages)) + 800 * sum(len(m.images) for m in messages)
+    total = estimate_tokens((system or "") + "".join(m.text for m in messages)) + 800 * sum(
+        len(m.images) for m in messages
+    )
     if _TRANSLATE.search(text):
         t: TaskType = "translation"
     elif _CODE.search(text):
@@ -148,7 +161,13 @@ def select_model(profile: TaskProfile, candidates: list[ModelCandidate]) -> Rout
             cost_score = float((hi - p) / (hi - lo))
         fit = 0.05 if profile.task_type in c.capabilities else 0.0
         unknown_ctx_penalty = 0.05 if c.context_window is None and need > 8000 else 0.0
-        score = wq * (c.quality_tier - 1) / 4 + ws * (c.speed_tier - 1) / 4 + wc * cost_score + fit - unknown_ctx_penalty
+        score = (
+            wq * (c.quality_tier - 1) / 4
+            + ws * (c.speed_tier - 1) / 4
+            + wc * cost_score
+            + fit
+            - unknown_ctx_penalty
+        )
         scored.append((round(score, 4), c))
     scored.sort(key=lambda sc: (-sc[0], sc[1].model_name))
     best = scored[0][1]

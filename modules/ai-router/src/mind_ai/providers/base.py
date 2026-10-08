@@ -19,7 +19,9 @@ class ProviderAdapter:
     supports_embeddings: ClassVar[bool] = False
     supports_images: ClassVar[bool] = False
 
-    def __init__(self, api_key: str | None, base_url: str | None = None, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self, api_key: str | None, base_url: str | None = None, client: httpx.AsyncClient | None = None
+    ) -> None:
         self.api_key = api_key or ""
         self.base_url = (base_url or self.default_base_url).rstrip("/")
         self._client = client
@@ -47,10 +49,16 @@ class ProviderAdapter:
         raise NotImplementedError
 
     async def embed(self, model: str, texts: list[str]) -> EmbeddingResult:
-        raise ProviderError("unsupported", f"{self.kind} adapter does not implement embeddings", provider=self.kind)
+        raise ProviderError(
+            "unsupported", f"{self.kind} adapter does not implement embeddings", provider=self.kind
+        )
 
-    async def generate_image(self, model: str, prompt: str, size: str = "1024x1024", n: int = 1) -> ImageResult:
-        raise ProviderError("unsupported", f"{self.kind} adapter does not implement image generation", provider=self.kind)
+    async def generate_image(
+        self, model: str, prompt: str, size: str = "1024x1024", n: int = 1
+    ) -> ImageResult:
+        raise ProviderError(
+            "unsupported", f"{self.kind} adapter does not implement image generation", provider=self.kind
+        )
 
     # -- helpers ---------------------------------------------------------------------
     async def complete(self, req: ChatRequest) -> tuple[str, Usage, str | None]:
@@ -78,7 +86,12 @@ class ProviderAdapter:
         except (ValueError, AttributeError):
             msg = body[:300].decode(errors="replace")
         msg = msg.replace(self.api_key, "***") if self.api_key else msg
-        return ProviderError(kind_for_status(status), f"{self.kind} returned HTTP {status}: {msg or 'no detail'}", status, self.kind)
+        return ProviderError(
+            kind_for_status(status),
+            f"{self.kind} returned HTTP {status}: {msg or 'no detail'}",
+            status,
+            self.kind,
+        )
 
     async def _request_json(self, method: str, url: str, **kw: Any) -> Any:
         try:
@@ -86,18 +99,26 @@ class ProviderAdapter:
         except httpx.TimeoutException as exc:
             raise ProviderError("timeout", f"{self.kind} request timed out", provider=self.kind) from exc
         except httpx.HTTPError as exc:
-            raise ProviderError("network", f"{self.kind} network error: {type(exc).__name__}", provider=self.kind) from exc
+            raise ProviderError(
+                "network", f"{self.kind} network error: {type(exc).__name__}", provider=self.kind
+            ) from exc
         if resp.status_code >= 400:
             raise self._error_from_response(resp.status_code, resp.content)
         try:
             return resp.json()
         except ValueError as exc:
-            raise ProviderError("unknown", f"{self.kind} returned a non-JSON response", resp.status_code, self.kind) from exc
+            raise ProviderError(
+                "unknown", f"{self.kind} returned a non-JSON response", resp.status_code, self.kind
+            ) from exc
 
-    async def _sse(self, url: str, body: dict[str, Any], params: dict[str, str] | None = None) -> AsyncIterator[tuple[str, str]]:
+    async def _sse(
+        self, url: str, body: dict[str, Any], params: dict[str, str] | None = None
+    ) -> AsyncIterator[tuple[str, str]]:
         """Yield (event, data) pairs from a server-sent-events response."""
         try:
-            async with self.client.stream("POST", url, headers=self.headers(), json=body, params=params) as resp:
+            async with self.client.stream(
+                "POST", url, headers=self.headers(), json=body, params=params
+            ) as resp:
                 if resp.status_code >= 400:
                     raise self._error_from_response(resp.status_code, await resp.aread())
                 event, data_lines = "message", []
@@ -117,7 +138,9 @@ class ProviderAdapter:
         except httpx.TimeoutException as exc:
             raise ProviderError("timeout", f"{self.kind} stream timed out", provider=self.kind) from exc
         except httpx.HTTPError as exc:
-            raise ProviderError("network", f"{self.kind} network error: {type(exc).__name__}", provider=self.kind) from exc
+            raise ProviderError(
+                "network", f"{self.kind} network error: {type(exc).__name__}", provider=self.kind
+            ) from exc
 
 
 async def with_retries(fn: Any, attempts: int = 3, base_delay: float = 0.5) -> Any:

@@ -70,7 +70,12 @@ class Passage:
 def _is_public_ip(ip: str) -> bool:
     addr = ipaddress.ip_address(ip)
     return not (
-        addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_multicast or addr.is_reserved or addr.is_unspecified
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_multicast
+        or addr.is_reserved
+        or addr.is_unspecified
     )
 
 
@@ -81,21 +86,53 @@ async def assert_public_url(url: str) -> None:
     if not p.hostname:
         raise ResearchError("blocked", "URL has no host")
     try:
-        infos = await asyncio.get_running_loop().getaddrinfo(p.hostname, p.port or (443 if p.scheme == "https" else 80))
+        infos = await asyncio.get_running_loop().getaddrinfo(
+            p.hostname, p.port or (443 if p.scheme == "https" else 80)
+        )
     except socket.gaierror as exc:
         raise ResearchError("dns", f"could not resolve {p.hostname}") from exc
     for info in infos:
         ip = str(info[4][0])
         if not _is_public_ip(ip):
-            raise ResearchError("blocked", f"{p.hostname} resolves to a non-public address ({ip}); refusing to fetch")
+            raise ResearchError(
+                "blocked", f"{p.hostname} resolves to a non-public address ({ip}); refusing to fetch"
+            )
 
 
 # ---------------------------------------------------------------------------- HTML -> text
 
 
 class _Readable(HTMLParser):
-    SKIP: ClassVar[set[str]] = {"script", "style", "noscript", "nav", "footer", "header", "aside", "form", "svg", "iframe", "template"}
-    BLOCK: ClassVar[set[str]] = {"p", "div", "li", "br", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "section", "article", "blockquote", "pre"}
+    SKIP: ClassVar[set[str]] = {
+        "script",
+        "style",
+        "noscript",
+        "nav",
+        "footer",
+        "header",
+        "aside",
+        "form",
+        "svg",
+        "iframe",
+        "template",
+    }
+    BLOCK: ClassVar[set[str]] = {
+        "p",
+        "div",
+        "li",
+        "br",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "tr",
+        "section",
+        "article",
+        "blockquote",
+        "pre",
+    }
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -139,8 +176,12 @@ def html_to_text(markup: str) -> tuple[str, str]:
 
 
 class Fetcher:
-    def __init__(self, client: httpx.AsyncClient | None = None, check_ssrf: bool = True, respect_robots: bool = True) -> None:
-        self.client = client or httpx.AsyncClient(timeout=httpx.Timeout(20.0), follow_redirects=False, headers={"User-Agent": USER_AGENT})
+    def __init__(
+        self, client: httpx.AsyncClient | None = None, check_ssrf: bool = True, respect_robots: bool = True
+    ) -> None:
+        self.client = client or httpx.AsyncClient(
+            timeout=httpx.Timeout(20.0), follow_redirects=False, headers={"User-Agent": USER_AGENT}
+        )
         self.check_ssrf = check_ssrf
         self.respect_robots = respect_robots
         self._robots: dict[str, RobotFileParser | None] = {}
@@ -197,7 +238,9 @@ class Fetcher:
             elif ctype.startswith("text/") or ctype == "application/json":
                 title, text = "", body.decode(encoding, errors="replace")
             else:
-                raise ResearchError("unsupported", f"content type '{ctype}' is not supported for research extraction")
+                raise ResearchError(
+                    "unsupported", f"content type '{ctype}' is not supported for research extraction"
+                )
             return FetchedPage(
                 url=url,
                 final_url=current,
@@ -217,7 +260,9 @@ class Fetcher:
 class SearchEngine:
     name: ClassVar[str]
 
-    def __init__(self, api_key: str | None = None, base_url: str | None = None, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self, api_key: str | None = None, base_url: str | None = None, client: httpx.AsyncClient | None = None
+    ) -> None:
         self.api_key = api_key or ""
         self.base_url = base_url
         self.client = client or httpx.AsyncClient(timeout=20.0)
@@ -241,7 +286,10 @@ class BraveSearch(SearchEngine):
             headers={"X-Subscription-Token": self.api_key, "Accept": "application/json"},
         )
         data = self._check(r)
-        return [SearchHit(h["url"], h.get("title", ""), h.get("description", ""), self.name) for h in (data.get("web") or {}).get("results", [])]
+        return [
+            SearchHit(h["url"], h.get("title", ""), h.get("description", ""), self.name)
+            for h in (data.get("web") or {}).get("results", [])
+        ]
 
 
 class TavilySearch(SearchEngine):
@@ -254,7 +302,10 @@ class TavilySearch(SearchEngine):
             headers={"Authorization": f"Bearer {self.api_key}"},
         )
         data = self._check(r)
-        return [SearchHit(h["url"], h.get("title", ""), h.get("content", ""), self.name) for h in data.get("results", [])]
+        return [
+            SearchHit(h["url"], h.get("title", ""), h.get("content", ""), self.name)
+            for h in data.get("results", [])
+        ]
 
 
 class SearxngSearch(SearchEngine):
@@ -265,9 +316,14 @@ class SearxngSearch(SearchEngine):
     async def search(self, query: str, count: int = 8) -> list[SearchHit]:
         if not self.base_url:
             raise ResearchError("config", "SearXNG base URL is not configured")
-        r = await self.client.get(f"{self.base_url.rstrip('/')}/search", params={"q": query, "format": "json"})
+        r = await self.client.get(
+            f"{self.base_url.rstrip('/')}/search", params={"q": query, "format": "json"}
+        )
         data = self._check(r)
-        return [SearchHit(h["url"], h.get("title", ""), h.get("content", ""), self.name) for h in data.get("results", [])[:count]]
+        return [
+            SearchHit(h["url"], h.get("title", ""), h.get("content", ""), self.name)
+            for h in data.get("results", [])[:count]
+        ]
 
 
 ENGINES: dict[str, type[SearchEngine]] = {e.name: e for e in (BraveSearch, TavilySearch, SearxngSearch)}
@@ -277,7 +333,9 @@ ENGINES: dict[str, type[SearchEngine]] = {e.name: e for e in (BraveSearch, Tavil
 
 
 _WORD = re.compile(r"\w+", re.UNICODE)
-_STOP = set("the a an and or of to in on for with is are was were be by as at from that this it its into than then".split())
+_STOP = set(
+    "the a an and or of to in on for with is are was were be by as at from that this it its into than then".split()
+)
 
 
 def _terms(s: str) -> list[str]:

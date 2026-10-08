@@ -100,7 +100,9 @@ class S3Storage:
         self.client.put_object(Bucket=self.bucket, Key=_check_key(key), Body=data, ContentType=content_type)
 
     def put_file(self, key: str, path: Path, content_type: str = "application/octet-stream") -> None:
-        self.client.upload_file(str(path), self.bucket, _check_key(key), ExtraArgs={"ContentType": content_type})
+        self.client.upload_file(
+            str(path), self.bucket, _check_key(key), ExtraArgs={"ContentType": content_type}
+        )
 
     def get_bytes(self, key: str) -> bytes:
         try:

@@ -11,7 +11,17 @@ import logging
 import uuid
 from datetime import timedelta
 
-from mind_sandbox import PROJECT_TEMPLATES, SandboxError, docker_available, is_running, logs, materialize, start_service, stop, wait_until_ready
+from mind_sandbox import (
+    PROJECT_TEMPLATES,
+    SandboxError,
+    docker_available,
+    is_running,
+    logs,
+    materialize,
+    start_service,
+    stop,
+    wait_until_ready,
+)
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -35,7 +45,11 @@ def preview_url(preview_id: uuid.UUID) -> str:
 
 
 def active_preview(db: Session, project_id: uuid.UUID) -> Preview | None:
-    return db.scalar(select(Preview).where(Preview.project_id == project_id, Preview.status == "running").order_by(Preview.started_at.desc()))
+    return db.scalar(
+        select(Preview)
+        .where(Preview.project_id == project_id, Preview.status == "running")
+        .order_by(Preview.started_at.desc())
+    )
 
 
 def stop_preview(db: Session, p: Preview) -> None:
@@ -58,9 +72,18 @@ def start_preview(db: Session, project: Project, user_id: uuid.UUID) -> tuple[Pr
             current.last_access_at = utcnow()
             return current, True
         stop_preview(db, current)
-    running = db.scalar(select(func.count()).select_from(Preview).where(Preview.org_id == project.org_id, Preview.status == "running")) or 0
+    running = (
+        db.scalar(
+            select(func.count())
+            .select_from(Preview)
+            .where(Preview.org_id == project.org_id, Preview.status == "running")
+        )
+        or 0
+    )
     if running >= s.max_previews_per_org:
-        raise PreviewError(f"preview limit reached ({s.max_previews_per_org} running in this organization); stop another preview first")
+        raise PreviewError(
+            f"preview limit reached ({s.max_previews_per_org} running in this organization); stop another preview first"
+        )
     try:
         wd = materialize(read_files(db, project.id))
         h = start_service(wd, list(t.preview_command), t.port, runtime=t.runtime)
@@ -70,7 +93,14 @@ def start_preview(db: Session, project: Project, user_id: uuid.UUID) -> tuple[Pr
         out = logs(h.container_id)
         stop(h.container_id)
         raise PreviewError(f"the app did not start within 25 s. Container output:\n{out[-3000:]}")
-    p = Preview(org_id=project.org_id, project_id=project.id, started_by=user_id, container_id=h.container_id, upstream_url=h.url, files_sha=digest)
+    p = Preview(
+        org_id=project.org_id,
+        project_id=project.id,
+        started_by=user_id,
+        container_id=h.container_id,
+        upstream_url=h.url,
+        files_sha=digest,
+    )
     db.add(p)
     db.flush()
     return p, False

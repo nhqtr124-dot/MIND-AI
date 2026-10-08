@@ -104,11 +104,22 @@ Rules:
 
 
 def plan_with_llm(org_id: uuid.UUID, user_id: uuid.UUID, goal: str) -> Plan:
-    tools = [{k: v for k, v in t.items() if k in ("name", "description", "risk", "args_schema")} for t in tool_catalog() if t["available"]]
+    tools = [
+        {k: v for k, v in t.items() if k in ("name", "description", "risk", "args_schema")}
+        for t in tool_catalog()
+        if t["available"]
+    ]
     prompt = f"Available tools (JSON):\n{json.dumps(tools)}\n\nGoal:\n{goal}"
     last_err = ""
     for _ in range(2):
-        r = llm.complete_sync(org_id, user_id, PLANNER_SYSTEM, prompt + (f"\n\nYour previous plan was invalid: {last_err}. Fix it." if last_err else ""), max_output_tokens=4000, purpose="agent")
+        r = llm.complete_sync(
+            org_id,
+            user_id,
+            PLANNER_SYSTEM,
+            prompt + (f"\n\nYour previous plan was invalid: {last_err}. Fix it." if last_err else ""),
+            max_output_tokens=4000,
+            purpose="agent",
+        )
         try:
             return validate_plan(llm.extract_json(r.text))
         except (PlanError, ValueError) as exc:
@@ -186,7 +197,10 @@ def _spent(db: Session, run: AgentRun) -> Decimal:
     started = run.started_at or run.created_at
     total = db.scalar(
         select(func.coalesce(func.sum(UsageEvent.cost_usd), 0)).where(
-            UsageEvent.org_id == run.org_id, UsageEvent.user_id == run.user_id, UsageEvent.category == "agent", UsageEvent.created_at >= started
+            UsageEvent.org_id == run.org_id,
+            UsageEvent.user_id == run.user_id,
+            UsageEvent.category == "agent",
+            UsageEvent.created_at >= started,
         )
     )
     return Decimal(total or 0)
@@ -250,10 +264,20 @@ def agent_run(ctx: JobContext) -> dict[str, Any]:
                 while changed:
                     changed = False
                     for t in tasks:
-                        if t.status == "planned" and any(by_key[d].status in ("failed", "cancelled") for d in t.depends_on):
-                            t.status, t.error, t.finished_at = "cancelled", "a dependency did not complete", utcnow()
+                        if t.status == "planned" and any(
+                            by_key[d].status in ("failed", "cancelled") for d in t.depends_on
+                        ):
+                            t.status, t.error, t.finished_at = (
+                                "cancelled",
+                                "a dependency did not complete",
+                                utcnow(),
+                            )
                             changed = True
-                ready = [t for t in tasks if t.status == "planned" and all(by_key[d].status == "completed" for d in t.depends_on)]
+                ready = [
+                    t
+                    for t in tasks
+                    if t.status == "planned" and all(by_key[d].status == "completed" for d in t.depends_on)
+                ]
                 to_run: list[uuid.UUID] = []
                 for t in ready:
                     tool = TOOLS[t.tool]
@@ -269,7 +293,16 @@ def agent_run(ctx: JobContext) -> dict[str, Any]:
                         db.add(appr)
                         db.flush()
                         t.approval_id, t.status = appr.id, "awaiting_approval"
-                        audit(db, "approval.requested", user_id=run.user_id, org_id=run.org_id, target_type="approval", target_id=appr.id, tool=t.tool, risk=tool.risk)
+                        audit(
+                            db,
+                            "approval.requested",
+                            user_id=run.user_id,
+                            org_id=run.org_id,
+                            target_type="approval",
+                            target_id=appr.id,
+                            tool=t.tool,
+                            risk=tool.risk,
+                        )
                     elif appr.status == "approved":
                         to_run.append(t.id)
                     elif appr.status in ("rejected", "expired"):
@@ -294,7 +327,11 @@ def agent_run(ctx: JobContext) -> dict[str, Any]:
         statuses = [t.status for t in run.tasks]
         if "awaiting_approval" in statuses and not run.cancel_requested:
             run.status = "awaiting_approval"
-            return {"run_id": str(run_id), "status": run.status, "waiting_for_approval": statuses.count("awaiting_approval")}
+            return {
+                "run_id": str(run_id),
+                "status": run.status,
+                "waiting_for_approval": statuses.count("awaiting_approval"),
+            }
         completed = statuses.count("completed")
         if run.cancel_requested:
             run.status = "cancelled"
@@ -306,15 +343,36 @@ def agent_run(ctx: JobContext) -> dict[str, Any]:
             run.status = "partially_completed"
         run.finished_at = utcnow()
         run.result = {
-            "tasks": {t.key: {"status": t.status, "error": t.error, "verification": t.verification} for t in run.tasks},
-            "artifacts": [t.output["artifact_id"] for t in run.tasks if t.output and t.output.get("artifact_id")],
+            "tasks": {
+                t.key: {"status": t.status, "error": t.error, "verification": t.verification}
+                for t in run.tasks
+            },
+            "artifacts": [
+                t.output["artifact_id"] for t in run.tasks if t.output and t.output.get("artifact_id")
+            ],
         }
         final = run.status
-    return {"run_id": str(run_id), "status": final, "_status": "completed" if final == "completed" else "partially_completed" if final == "partially_completed" else "failed"}
+    return {
+        "run_id": str(run_id),
+        "status": final,
+        "_status": "completed"
+        if final == "completed"
+        else "partially_completed"
+        if final == "partially_completed"
+        else "failed",
+    }
 
 
 def start_run(db: Session, run: AgentRun) -> uuid.UUID:
-    job = enqueue(db, "agent.run", org_id=run.org_id, user_id=run.user_id, project_id=run.project_id, payload={"run_id": str(run.id)}, max_attempts=1)
+    job = enqueue(
+        db,
+        "agent.run",
+        org_id=run.org_id,
+        user_id=run.user_id,
+        project_id=run.project_id,
+        payload={"run_id": str(run.id)},
+        max_attempts=1,
+    )
     return job.id
 
 

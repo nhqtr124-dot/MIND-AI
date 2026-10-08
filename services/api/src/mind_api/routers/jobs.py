@@ -36,7 +36,14 @@ def _public(job: Job) -> JobOut:
 
 
 @router.get("", response_model=list[JobOut])
-def list_jobs(user: CurrentUser, db: DB, org_id: uuid.UUID | None = None, project_id: uuid.UUID | None = None, kind: str | None = None, limit: int = 50) -> list[JobOut]:
+def list_jobs(
+    user: CurrentUser,
+    db: DB,
+    org_id: uuid.UUID | None = None,
+    project_id: uuid.UUID | None = None,
+    kind: str | None = None,
+    limit: int = 50,
+) -> list[JobOut]:
     scope = resolve_scope(db, user, org_id, project_id)
     q = select(Job).where(Job.org_id == scope.org_id)
     if scope.role not in ("owner", "admin"):
@@ -91,4 +98,8 @@ async def job_events(job_id: uuid.UUID, request: Request, user: CurrentUser, db:
                 return
             await asyncio.sleep(1)
 
-    return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

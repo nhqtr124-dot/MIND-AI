@@ -8,6 +8,7 @@ existence does not leak across tenants.
 from __future__ import annotations
 
 import hmac
+import logging
 import time
 import uuid
 from collections import defaultdict, deque
@@ -90,10 +91,14 @@ def forbidden(detail: str = "You do not have permission to do this") -> HTTPExce
 
 
 def org_role(db: Session, user: User, org_id: uuid.UUID) -> str | None:
-    return db.scalar(select(Membership.role).where(Membership.org_id == org_id, Membership.user_id == user.id))
+    return db.scalar(
+        select(Membership.role).where(Membership.org_id == org_id, Membership.user_id == user.id)
+    )
 
 
-def require_org(db: Session, user: User, org_id: uuid.UUID, min_role: str = "viewer") -> tuple[Organization, str]:
+def require_org(
+    db: Session, user: User, org_id: uuid.UUID, min_role: str = "viewer"
+) -> tuple[Organization, str]:
     role = org_role(db, user, org_id)
     org = db.get(Organization, org_id) if role else None
     if org is None or role is None:
@@ -113,7 +118,9 @@ def project_role(db: Session, user: User, project: Project) -> str | None:
     return pm.role if pm else None
 
 
-def require_project(db: Session, user: User, project_id: uuid.UUID, min_role: str = "viewer") -> tuple[Project, str]:
+def require_project(
+    db: Session, user: User, project_id: uuid.UUID, min_role: str = "viewer"
+) -> tuple[Project, str]:
     project = db.get(Project, project_id)
     role = project_role(db, user, project) if project else None
     if project is None or role is None or project.archived_at is not None:
@@ -132,7 +139,9 @@ class Scope:
     role: str
 
 
-def resolve_scope(db: Session, user: User, org_id: uuid.UUID | None, project_id: uuid.UUID | None, min_role: str = "viewer") -> Scope:
+def resolve_scope(
+    db: Session, user: User, org_id: uuid.UUID | None, project_id: uuid.UUID | None, min_role: str = "viewer"
+) -> Scope:
     if project_id is not None:
         project, role = require_project(db, user, project_id, min_role)
         if org_id is not None and org_id != project.org_id:
@@ -176,8 +185,10 @@ class RateLimiter:
                 pipe.expire(bucket, window_s + 1)
                 count = int(pipe.execute()[0])
                 return count <= limit
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception:  # noqa: BLE001 - Redis outage: degrade to the in-memory window
+                logging.getLogger("mind.ratelimit").warning(
+                    "redis rate limiter unavailable; using in-memory fallback"
+                )
         now = time.monotonic()
         q = self._mem[key]
         while q and now - q[0] > window_s:

@@ -161,11 +161,18 @@ def render_pdf(spec: DocumentSpec, path: Path) -> Path:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import cm
-    from reportlab.platypus import Image, ListFlowable, ListItem, PageBreak as RLPageBreak
+    from reportlab.platypus import (
+        Image,
+        ListFlowable,
+        ListItem,
+        Preformatted,
+        SimpleDocTemplate,
+        Spacer,
+        TableStyle,
+    )
+    from reportlab.platypus import PageBreak as RLPageBreak
     from reportlab.platypus import Paragraph as RLParagraph
-    from reportlab.platypus import Preformatted, SimpleDocTemplate, Spacer
     from reportlab.platypus import Table as RLTable
-    from reportlab.platypus import TableStyle
 
     font, bold = _pdf_font()
     rtl = spec.language in _RTL_LANGS
@@ -174,7 +181,10 @@ def render_pdf(spec: DocumentSpec, path: Path) -> Path:
     body = ParagraphStyle("body", parent=ss["BodyText"], fontName=font, fontSize=10.5, leading=15, **align)
     title = ParagraphStyle("title", parent=ss["Title"], fontName=bold, **align)
     sub = ParagraphStyle("sub", parent=ss["Heading3"], fontName=font, textColor=colors.grey, **align)
-    hs = {lvl: ParagraphStyle(f"h{lvl}", parent=ss[f"Heading{min(lvl, 4)}"], fontName=bold, **align) for lvl in range(1, 5)}
+    hs = {
+        lvl: ParagraphStyle(f"h{lvl}", parent=ss[f"Heading{min(lvl, 4)}"], fontName=bold, **align)
+        for lvl in range(1, 5)
+    }
 
     story: list[Any] = [RLParagraph(_shape(spec.title, rtl), title)]
     if spec.subtitle:
@@ -213,7 +223,9 @@ def render_pdf(spec: DocumentSpec, path: Path) -> Path:
         elif isinstance(b, Chart):
             story.append(Image(io.BytesIO(chart_png(b)), width=16 * cm, height=8.5 * cm))
         elif isinstance(b, Code):
-            story.append(Preformatted(b.text, ParagraphStyle("code", fontName="Courier", fontSize=8.5, leading=11)))
+            story.append(
+                Preformatted(b.text, ParagraphStyle("code", fontName="Courier", fontSize=8.5, leading=11))
+            )
         elif isinstance(b, PageBreak):
             story.append(RLPageBreak())
         story.append(Spacer(1, 0.2 * cm))
@@ -285,9 +297,14 @@ def to_text(spec: DocumentSpec) -> str:
         elif isinstance(b, Table):
             out += ["\t".join(b.columns)] + ["\t".join(_cell(v) for v in r) for r in b.rows] + [""]
         elif isinstance(b, Chart):
-            out += [f"[{b.kind} chart] {b.title}"] + [
-                f"{label}: " + ", ".join(f"{s.name}={s.values[i]}" for s in b.series) for i, label in enumerate(b.labels)
-            ] + [""]
+            out += (
+                [f"[{b.kind} chart] {b.title}"]
+                + [
+                    f"{label}: " + ", ".join(f"{s.name}={s.values[i]}" for s in b.series)
+                    for i, label in enumerate(b.labels)
+                ]
+                + [""]
+            )
         elif isinstance(b, Code):
             out += [b.text, ""]
     return "\n".join(out).rstrip() + "\n"
@@ -342,7 +359,9 @@ def render_pptx(spec: PresentationSpec, path: Path) -> Path:
         width = Inches(6.1) if sl.bullets else Inches(11.9)
         if sl.table:
             t = sl.table
-            shape = s.shapes.add_table(1 + len(t.rows), len(t.columns), left, top, width, Inches(0.4) * (1 + len(t.rows)))
+            shape = s.shapes.add_table(
+                1 + len(t.rows), len(t.columns), left, top, width, Inches(0.4) * (1 + len(t.rows))
+            )
             for j, c in enumerate(t.columns):
                 shape.table.cell(0, j).text = c
             for i, r in enumerate(t.rows, start=1):

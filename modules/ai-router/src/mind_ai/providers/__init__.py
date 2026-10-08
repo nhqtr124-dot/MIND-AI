@@ -8,7 +8,9 @@ ADAPTERS: dict[str, type[ProviderAdapter]] = {
 }
 
 
-def make_adapter(kind: str, api_key: str | None, base_url: str | None = None, **kw: object) -> ProviderAdapter:
+def make_adapter(
+    kind: str, api_key: str | None, base_url: str | None = None, **kw: object
+) -> ProviderAdapter:
     try:
         cls = ADAPTERS[kind]
     except KeyError as exc:
@@ -16,4 +18,13 @@ def make_adapter(kind: str, api_key: str | None, base_url: str | None = None, **
     return cls(api_key, base_url, **kw)  # type: ignore[arg-type]
 
 
-__all__ = ["ADAPTERS", "AnthropicAdapter", "GeminiAdapter", "OpenAIAdapter", "OpenAICompatibleAdapter", "ProviderAdapter", "make_adapter", "with_retries"]
+__all__ = [
+    "ADAPTERS",
+    "AnthropicAdapter",
+    "GeminiAdapter",
+    "OpenAIAdapter",
+    "OpenAICompatibleAdapter",
+    "ProviderAdapter",
+    "make_adapter",
+    "with_retries",
+]

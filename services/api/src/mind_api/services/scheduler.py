@@ -24,7 +24,14 @@ def next_run(cron: str, tz: str, after: datetime) -> datetime:
 
 def trigger_workflow(db: Session, wf: Workflow, user_id, reason: str) -> AgentRun:  # type: ignore[no-untyped-def]
     plan = validate_plan(wf.definition)
-    run = AgentRun(org_id=wf.org_id, project_id=wf.project_id, user_id=user_id, goal=f"Workflow '{wf.name}' ({reason})", plan_source="user", time_limit_s=int(wf.definition.get("time_limit_s", 900)))
+    run = AgentRun(
+        org_id=wf.org_id,
+        project_id=wf.project_id,
+        user_id=user_id,
+        goal=f"Workflow '{wf.name}' ({reason})",
+        plan_source="user",
+        time_limit_s=int(wf.definition.get("time_limit_s", 900)),
+    )
     db.add(run)
     db.flush()
     materialize_plan(db, run, plan)
@@ -35,7 +42,11 @@ def trigger_workflow(db: Session, wf: Workflow, user_id, reason: str) -> AgentRu
 def enqueue_due_workflows(db: Session) -> int:
     now = utcnow()
     n = 0
-    due = db.scalars(select(ScheduledJob).where(ScheduledJob.enabled.is_(True), ScheduledJob.next_run_at <= now).with_for_update(skip_locked=True)).all()
+    due = db.scalars(
+        select(ScheduledJob)
+        .where(ScheduledJob.enabled.is_(True), ScheduledJob.next_run_at <= now)
+        .with_for_update(skip_locked=True)
+    ).all()
     for sj in due:
         wf = db.get(Workflow, sj.workflow_id)
         sj.next_run_at = next_run(sj.cron, sj.timezone, now)

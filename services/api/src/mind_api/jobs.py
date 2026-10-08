@@ -59,7 +59,9 @@ class JobContext:
             db.execute(
                 update(Job)
                 .where(Job.id == self.job_id)
-                .values(progress=max(0, min(100, pct)), message=message[:2000], lease_expires_at=utcnow() + lease)
+                .values(
+                    progress=max(0, min(100, pct)), message=message[:2000], lease_expires_at=utcnow() + lease
+                )
             )
             cancelled = db.scalar(select(Job.cancel_requested).where(Job.id == self.job_id))
         if cancelled:
@@ -92,7 +94,15 @@ def enqueue(
     payload: dict[str, Any] | None = None,
     max_attempts: int = 3,
 ) -> Job:
-    job = Job(kind=kind, org_id=org_id, user_id=user_id, project_id=project_id, payload=payload or {}, max_attempts=max_attempts, message="queued")
+    job = Job(
+        kind=kind,
+        org_id=org_id,
+        user_id=user_id,
+        project_id=project_id,
+        payload=payload or {},
+        max_attempts=max_attempts,
+        message="queued",
+    )
     db.add(job)
     db.flush()
     return job
@@ -152,7 +162,9 @@ def run_job(job_id: uuid.UUID) -> str:
     with session_scope() as db:
         job = db.get(Job, job_id)
         assert job is not None
-        ctx = JobContext(job.id, job.kind, job.org_id, job.user_id, job.project_id, dict(job.payload), job.attempts)
+        ctx = JobContext(
+            job.id, job.kind, job.org_id, job.user_id, job.project_id, dict(job.payload), job.attempts
+        )
         fn = HANDLERS.get(job.kind)
     status, result, error, retry_delay = "failed", None, None, None
     if fn is None:
@@ -185,9 +197,11 @@ def run_job(job_id: uuid.UUID) -> str:
         job.result = result
         job.error = error
         job.progress = 100 if status == "completed" else job.progress
-        job.message = {"completed": "completed", "cancelled": "cancelled", "partially_completed": "partially completed"}.get(
-            status, (error or {}).get("message", "failed")
-        )[:2000]
+        job.message = {
+            "completed": "completed",
+            "cancelled": "cancelled",
+            "partially_completed": "partially completed",
+        }.get(status, (error or {}).get("message", "failed"))[:2000]
         job.finished_at = utcnow()
         job.locked_by = None
         job.lease_expires_at = None
