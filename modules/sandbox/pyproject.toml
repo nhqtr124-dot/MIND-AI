@@ -1,0 +1,13 @@
+[project]
+name = "mind-sandbox"
+version = "0.1.0"
+description = "MIND AI isolated code execution and preview containers (Docker)"
+requires-python = ">=3.12"
+dependencies = ["pydantic>=2.9"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mind_sandbox"]
