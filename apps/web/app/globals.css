@@ -1,0 +1,191 @@
+@import "tailwindcss";
+@import "katex/dist/katex.min.css";
+@import "highlight.js/styles/github-dark.css";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root,
+[data-theme="dark"] {
+  --mind-bg: #0a0c16;
+  --mind-surface: #11142a;
+  --mind-surface-2: #181c38;
+  --mind-border: #262b4d;
+  --mind-text: #e9ebf8;
+  --mind-muted: #9aa0c4;
+  --mind-primary: #7c6cff;
+  --mind-primary-text: #ffffff;
+  --mind-accent: #2dd4ef;
+  --mind-success: #22c55e;
+  --mind-warning: #f5a524;
+  --mind-danger: #f04452;
+  --mind-glow: 124 108 255;
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --mind-bg: #f6f7fc;
+  --mind-surface: #ffffff;
+  --mind-surface-2: #eef0fa;
+  --mind-border: #dce0f0;
+  --mind-text: #141733;
+  --mind-muted: #5a6087;
+  --mind-primary: #5b4beb;
+  --mind-primary-text: #ffffff;
+  --mind-accent: #0a8fb0;
+  --mind-success: #15803d;
+  --mind-warning: #b45309;
+  --mind-danger: #c81e2e;
+  --mind-glow: 91 75 235;
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--mind-bg);
+  --color-surface: var(--mind-surface);
+  --color-surface-2: var(--mind-surface-2);
+  --color-border: var(--mind-border);
+  --color-text: var(--mind-text);
+  --color-muted: var(--mind-muted);
+  --color-primary: var(--mind-primary);
+  --color-primary-text: var(--mind-primary-text);
+  --color-accent: var(--mind-accent);
+  --color-success: var(--mind-success);
+  --color-warning: var(--mind-warning);
+  --color-danger: var(--mind-danger);
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, "Noto Sans Arabic", "Tahoma", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+html,
+body {
+  background: var(--mind-bg);
+  color: var(--mind-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background-image:
+    radial-gradient(60rem 30rem at 10% -10%, rgb(var(--mind-glow) / 0.14), transparent 60%),
+    radial-gradient(50rem 25rem at 110% 10%, rgb(45 212 239 / 0.07), transparent 60%);
+  background-attachment: fixed;
+}
+
+:focus-visible {
+  outline: 2px solid var(--mind-accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: rgb(var(--mind-glow) / 0.35);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--mind-border) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes mind-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-in {
+  animation: mind-fade-in 180ms ease-out both;
+}
+
+.glass {
+  background: color-mix(in oklab, var(--mind-surface) 82%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+/* Markdown rendering */
+.prose-mind {
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.prose-mind > * + * {
+  margin-top: 0.75em;
+}
+.prose-mind h1 {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+.prose-mind h2 {
+  font-size: 1.2rem;
+  font-weight: 650;
+}
+.prose-mind h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.prose-mind ul {
+  list-style: disc;
+  padding-inline-start: 1.4rem;
+}
+.prose-mind ol {
+  list-style: decimal;
+  padding-inline-start: 1.4rem;
+}
+.prose-mind a {
+  color: var(--mind-accent);
+  text-decoration: underline;
+}
+.prose-mind code:not(pre code) {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--mind-surface-2);
+  border: 1px solid var(--mind-border);
+  padding: 0.05rem 0.35rem;
+  border-radius: 6px;
+}
+.prose-mind pre {
+  background: #0d1020;
+  border: 1px solid var(--mind-border);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  font-size: 0.86rem;
+  direction: ltr;
+  text-align: left;
+}
+.prose-mind pre code {
+  font-family: var(--font-mono);
+  background: transparent !important;
+  padding: 0 !important;
+}
+.prose-mind table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+.prose-mind th,
+.prose-mind td {
+  border: 1px solid var(--mind-border);
+  padding: 0.35rem 0.6rem;
+}
+.prose-mind blockquote {
+  border-inline-start: 3px solid var(--mind-primary);
+  padding-inline-start: 0.8rem;
+  color: var(--mind-muted);
+}
+.prose-mind .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
