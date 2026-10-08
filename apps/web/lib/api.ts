@@ -5,7 +5,8 @@ export const mind = new MindClient({
   baseUrl: "",
   auth: "cookie",
   onUnauthorized: () => {
-    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+    const PUBLIC = ["/login", "/register", "/invite"];
+    if (typeof window !== "undefined" && !PUBLIC.some((p) => window.location.pathname.startsWith(p))) {
       window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
     }
   },

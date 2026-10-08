@@ -200,7 +200,6 @@ export default function Workspace() {
           </div>
           {/* BOTTOM: terminal / tests */}
           <div className="max-h-56 min-h-24 overflow-y-auto border-t border-border bg-[#080a14] p-3 font-mono text-xs text-white/80" dir="ltr" aria-label="Terminal output">
-            {job && <div className="mb-2"><JobStatus job={job} /></div>}
             {lastResult?.tests ? (
               <>
                 <div className={lastResult.tests.passed ? "text-green-400" : "text-red-400"}>
@@ -220,6 +219,7 @@ export default function Workspace() {
         <aside className="flex min-h-0 flex-col border-s border-border bg-surface/40">
           <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm font-semibold"><Bot className="size-4 text-primary" /> Coding agent</div>
           <div className="flex-1 space-y-3 overflow-y-auto p-3 text-sm">
+            {job && running && <JobStatus job={job} />}
             {log.length === 0 && <p className="text-muted">Describe a change, e.g. “Add a scoreboard table with team names and points, saved in local storage.” The agent edits files, runs the tests in the sandbox and repairs a failing change once.</p>}
             {log.map((l, i) => {
               const r = l.job.result as AiResult | null;
